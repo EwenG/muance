@@ -4,8 +4,6 @@
             [goog.dom :as dom])
   #_(:refer-clojure :as c))
 
-
-
 (comment
 
   (do
@@ -18,7 +16,8 @@
            (fn [] (m/p)))
 
   (macroexpand-1 '(m/div (m/div) (m/with-key 33 (m/p))))
-  (defn f [x] (m/div (if x
+  (defn f [x] (m/div :lifecycle #js {:didMount (fn [] (prn "mount"))}
+                     (if x
                        (do (m/with-key 33 (m/p)))
                        (do (m/with-key 33 (m/p)) (m/div)))))
   (m/patch (.getElementById js/document "root") f false)

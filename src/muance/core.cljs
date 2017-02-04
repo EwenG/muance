@@ -179,11 +179,12 @@
       (aset *current-vnode* index-children parent-children))
     (if (or (and key (= key prev-key))
             (and (nil? key) (nil? prev-key) (= typeid prev-typeid)))
-      ;; TODO assert tags are equal when same key 
-      (when key nil)
       ;; same key or no keys and same typeid -> nothing to do
-      (do (set! *current-vnode* prev)
-          (willUpdate prev *props* *state*))
+      (do
+        ;; TODO assert tags are equal when same key 
+        (when key nil)
+        (set! *current-vnode* prev)
+        (willUpdate prev *props* *state*))
       (if moved-vnode
         (do (when (nil? *did-move*)
               (set! *did-move* moved-vnode))

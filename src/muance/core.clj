@@ -163,13 +163,13 @@
 (defn compile-element-macro
   ([env tag body]
    (let [compile-form (partial compile-form env)
-         [{:keys [didMount willUpdate didUpdate willUnmount] :as lifecycle}]
+         {:keys [didMount willUpdate didUpdate willUnmount] :as lifecycle}
          (cond
            (= :lifecycle (first body)) (-> body second lifecycle-as-map)
            :else nil)
          body (if lifecycle (drop 2 body) body)]
      (if lifecycle
-       `(do (open-lifecycle ~tag ~didMount ~willUpdate ~willUnmount)
+       `(do (open-lifecycle ~tag ~willUpdate ~willUnmount)
             ~@(map compile-form body)
             (close-lifecycle ~didMount ~didUpdate))
        `(do (open ~tag)
@@ -177,13 +177,13 @@
             (close)))))
   ([env tag typeid body]
    (let [compile-form (partial compile-form env)
-         [{:keys [didMount willUpdate didUpdate willUnmount] :as lifecycle}]
+         {:keys [didMount willUpdate didUpdate willUnmount] :as lifecycle}
          (cond
            (= :lifecycle (first body)) (-> body second lifecycle-as-map)
            :else nil)
          body (if lifecycle (drop 2 body) body)]
      (if lifecycle
-       `(do (open-typeid-lifecycle ~tag ~typeid ~didMount ~willUpdate ~willUnmount)
+       `(do (open-typeid-lifecycle ~tag ~typeid ~willUpdate ~willUnmount)
             ~@(map compile-form body)
             (close-lifecycle ~didMount ~didUpdate))
        `(do (open-typeid ~tag ~typeid)
