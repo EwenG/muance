@@ -14,12 +14,14 @@
     (.appendChild js/document.body (doto (js/document.createElement "div")
                                      (aset "id" "root"))))
   
-  (m/patch (.getElementById js/document "root")
+  (m/patch (.-firstChild (.getElementById js/document "root"))
            (fn [] (m/p)))
 
   (macroexpand-1 '(m/div (m/div) (m/with-key 33 (m/p))))
-  (defn f [] (m/div (m/div) (m/with-key 33 (m/p))))
-  (m/patch (.getElementById js/document "root") f)
+  (defn f [x] (m/div (if x
+                       (do (m/with-key 33 (m/p)))
+                       (do (m/with-key 33 (m/p)) (m/div)))))
+  (m/patch (.getElementById js/document "root") f false)
 
   (macroexpand-1 '(m/p (m/div)))
   (macroexpand-1 '(m/p (str "e") (m/div {:key 3 :lifecycle {:did-mount #(prn "e") :will-update (fn [])}})))

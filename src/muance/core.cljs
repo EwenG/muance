@@ -42,6 +42,32 @@
   (aset vnode index-parent-vnode nil)
   (aset *current-vnode* index-keymap-invalid true))
 
+(defn- call-unmount-hooks [vnode]
+  (when-let [unmount-hooks (aget vnode index-unmounts)]
+    (loop [l (dec (.-length unmount-hooks))]
+      (when (> l -1)
+        ((aget unmount-hooks l) (o/get vnode node-state-ref-key))
+        (recur (dec l))))))
+
+(defn- bottom-first-child [vnode]
+  (if-let [children (aget vnode index-children)]
+    (recur (aget children 0))
+    vnode))
+
+(defn- recursively-call-unmount-hooks [root]
+  (let [vnode (bottom-first-child root)]
+    (loop [vnode vnode]
+      (when-not (identical? vnode root)
+        (call-unmount-hooks vnode)
+        (when-let [children (aget vnode index-children)]
+          (let [children-count (.-length children)]
+            (loop [i 1]
+              (when (< i children-count)
+                (recursively-call-unmount-hooks (aget vnode index-children i))
+                (recur (inc i))))))
+        (recur (aget vnode index-parent-vnode)))))
+  (call-unmount-hooks root))
+
 (defn- remove-node [vnode]
   (when vnode
     (recursively-call-unmount-hooks vnode)
@@ -72,11 +98,16 @@
 
 (defn- new-element [vnode index tag]
   (let [new-node (.createElement js/document tag)
-        ref-node (aget vnode index-children (inc index))]
-    (.insertBefore (aget vnode index-node) new-node ref-node)
+        ref-vnode (aget vnode index-children (inc index))]
+    (.insertBefore (aget vnode index-node) new-node
+                   (when ref-vnode (aget ref-vnode index-node)))
     new-node))
 
 (defn- noop [vnode props state])
+
+(defn- init-keymap [keymap]
+  (o/set *current-vnode* index-keymap keymap)
+  keymap)
 
 (defn- new-vnode [typeid element willUnmount]
   #js [typeid *current-vnode* element])
@@ -85,14 +116,18 @@
   #js [typeid *current-vnode* element 0 nil 0 nil #js [willUnmount]])
 
 (defn- new-vnode-key [typeid element willUnmount keymap key]
-  (assert (not (o/containsKey keymap key)) (str "Duplicate key: " key) )
-  (let [vnode #js [typeid *current-vnode* element 0 nil 0 nil nil 0 nil key]]
+  (assert (or (nil? keymap) (not (o/containsKey keymap key)))
+          (str "Duplicate key: " key) )
+  (let [keymap (if (nil? keymap) (init-keymap #js {}) keymap)
+        vnode #js [typeid *current-vnode* element 0 nil 0 nil nil 0 nil key]]
     (o/set keymap key vnode)
     vnode))
 
 (defn- new-vnode-key-unmount [typeid element willUnmount keymap key]
-  (assert (not (o/containsKey keymap key)) (str "Duplicate key: " key) )
-  (let [vnode #js [typeid *current-vnode* element 0 nil 0 nil #js [willUnmount] 0 nil key]]
+  (assert (or (nil? keymap) (not (o/containsKey keymap key)))
+          (str "Duplicate key: " key) )
+  (let [keymap (if (nil? keymap) (init-keymap #js {}) keymap)
+        vnode #js [typeid *current-vnode* element 0 nil 0 nil #js [willUnmount] 0 nil key]]
     (o/set keymap key vnode)
     vnode))
 
@@ -103,39 +138,12 @@
     (when (and next-moved-node (not (identical? next-moved-node to-node)))
       (recur nodes (inc index) next-moved-node to-node))))
 
-(defn- call-unmount-hooks [vnode]
-  (when-let [unmount-hooks (aget vnode index-unmounts)]
-    (loop [l (dec (.-length unmount-hooks))]
-      (when (> l -1)
-        ((aget unmount-hooks l) (o/get vnode node-state-ref-key))
-        (recur (dec l))))))
-
-(defn- bottom-first-child [vnode]
-  (if-let [children (aget vnode index-children)]
-    (recur (aget children 0))
-    vnode))
-
-(defn- recursively-call-unmount-hooks [root]
-  (let [vnode (bottom-first-child root)]
-    (loop [vnode vnode]
-      (when-not (identical? vnode root)
-        (call-unmount-hooks vnode)
-        (when-let [children (aget vnode index-children)]
-          (let [children-count (.-length children)]
-            (loop [i 1]
-              (when (< i children-count)
-                (recursively-call-unmount-hooks (aget vnode index-children i))
-                (recur (inc i))))))
-        (recur (aget vnode index-parent-vnode)))))
-  (call-unmount-hooks root))
-
 (defn- open-lifecycle-impl [tag willUpdate willUnmount new-vnode set-state-ref?]
   (let [vnode-index (or (aget *current-vnode* index-children-count) 0)
         parent-children (or (aget *current-vnode* index-children) #js [])
         prev (aget parent-children vnode-index)
         prev-key (when prev (aget prev index-key))
-        prev-typeid (when prev (aget prev index-typeid))
-        keymap (aget *current-vnode* index-keymap)]
+        prev-typeid (when prev (aget prev index-typeid))]
     (set! *in-attrs-position* true)
     (aset *current-vnode* index-children-count (inc vnode-index))
     (when-not (aget *current-vnode* index-children)
@@ -162,8 +170,8 @@
         prev (aget parent-children vnode-index)
         prev-key (when prev (aget prev index-key))
         prev-typeid (when prev (aget prev index-typeid))
-        keymap (when key (or (aget *current-vnode* index-keymap) #js {}))
-        moved-vnode (and key (o/get keymap key))]
+        keymap (aget *current-vnode* index-keymap)
+        moved-vnode (and key keymap (o/get keymap key))]
     (set! *key* nil)
     (set! *in-attrs-position* true)
     (aset *current-vnode* index-children-count (inc vnode-index))
@@ -171,6 +179,8 @@
       (aset *current-vnode* index-children parent-children))
     (if (or (and key (= key prev-key))
             (and (nil? key) (nil? prev-key) (= typeid prev-typeid)))
+      ;; TODO assert tags are equal when same key 
+      (when key nil)
       ;; same key or no keys and same typeid -> nothing to do
       (do (set! *current-vnode* prev)
           (willUpdate prev *props* *state*))
@@ -286,7 +296,7 @@
       (clean-children *current-vnode*)
       (clean-keymap *current-vnode*)
       (call-did-mount-hooks *didMounts*))
-    (binding [*current-vnode* #js [nil nil node 0 nil]
+    (binding [*current-vnode* #js [nil nil node 0 #js []]
               *key* nil
               *didMounts* #js []
               *new-node* 0
