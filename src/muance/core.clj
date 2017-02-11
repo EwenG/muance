@@ -83,14 +83,18 @@
         (symbol? x) (static-symbol? env x)
         :else false))
 
+(defn as-str [x]
+  (cond (string? x) x
+        (keyword? x) (name x)
+        :else `(cljs.core/str ~x)))
+
 (defmacro attrs [& attributes]
   (cond (empty? attributes)
         nil
         (not (even? (count attributes)))
         (throw (IllegalArgumentException. "attrs expects an even number of forms"))
         :else (let [compiled-attrs (for [[k v] (partition 2 attributes)]
-                                     (let [k (if (keyword? k) (name k) k)]
-                                       `(attr ~k ~v)))]
+                                     `(attr ~(as-str k) ~v))]
                 (cons 'do compiled-attrs))))
 
 (defn compile-attrs [env [m & attributes]]
@@ -99,10 +103,9 @@
         (not (even? (count attributes)))
         (throw (IllegalArgumentException. "attrs expects an even number of forms"))
         :else (let [compiled-attrs (for [[k v] (partition 2 attributes)]
-                                     (let [k (if (keyword? k) (name k) k)]
-                                       (if (and (static? env k) (static? env v))
-                                         `(attr-static ~k ~v)
-                                         `(attr ~k ~v))))]
+                                     (if (and (static? env k) (static? env v))
+                                       `(attr-static ~(as-str k) ~v)
+                                       `(attr ~(as-str k) ~v)))]
                 (cons 'do compiled-attrs))))
 
 (defmacro class [& classes]
@@ -134,8 +137,7 @@
         (not (even? (count styles)))
         (throw (IllegalArgumentException. "style expects an even number of forms"))
         :else (let [compiled-attrs (for [[k v] (partition 2 styles)]
-                                     (let [k (if (keyword? k) (name k) k)]
-                                       `(style ~k ~v)))]
+                                     `(style ~(as-str k) ~v))]
                 (cons 'do compiled-attrs))))
 
 (defn compile-style [env [m & styles]]
@@ -144,10 +146,9 @@
         (not (even? (count styles)))
         (throw (IllegalArgumentException. "style expects an even number of forms"))
         :else (let [compiled-attrs (for [[k v] (partition 2 styles)]
-                                     (let [k (if (keyword? k) (name k) k)]
-                                       (if (and (static? env k) (static? env v))
-                                         `(style-static ~k ~v)
-                                         `(style ~k ~v))))]
+                                     (if (and (static? env k) (static? env v))
+                                       `(style-static ~(as-str k) ~v)
+                                       `(style ~(as-str k) ~v)))]
                 (cons 'do compiled-attrs))))
 
 (defn lifecycle-as-map [lifecycle]
@@ -155,9 +156,7 @@
     (.-val lifecycle)
     {:didMount `(goog.object/get ~lifecycle "didMount")
      :willUpdate `(goog.object/get ~lifecycle "willUpdate")
-     :willMove `(goog.object/get ~lifecycle "willMove")
      :didUpdate `(goog.object/get ~lifecycle "didUpdate")
-     :didMove `(goog.object/get ~lifecycle "didMove")
      :willUnmount `(goog.object/get ~lifecycle "willUnmount")}))
 
 (defn compile-element-macro
@@ -223,14 +222,30 @@
 
 (def-element-macros)
 
+(defn params-with-props [params]
+  (cond (symbol? params) [params params]
+        (vector? params) (let [props-sym (gensym "props")]
+                           [(conj params :as props-sym) props-sym])
+        (map? params) (let [props-sym (gensym "props")]
+                        [(conj params :as props-sym) props-sym])
+        :else nil))
+
 (defmacro defcomp [name docstring-or-params & params-body]
   (let [name (if (string? docstring-or-params)
                (vary-meta name assoc :doc docstring-or-params)
                name)
         params (if (string? docstring-or-params) (first params-body) docstring-or-params)
+        _ (assert (<= (count params) 1) (str name " must take 0 or 1 argument"))
+        [params-with-props props-sym] (params-with-props (first params))
+        parent-props-sym (gensym "parent-props")
         body (if (string? docstring-or-params) (rest params-body) params-body)]
-    (assert (<= (count params) 1) (str name " must take 0 or 1 argument"))
-    `(defn ~name ~params ~@body)))
+    `(defn ~name ~(if params-with-props `[~params-with-props] [])
+       ~@(if props-sym
+           `((cljs.core/let [~parent-props-sym *props*]
+               (set! *props* ~props-sym)
+               ~@body
+               (set! *props* ~parent-props-sym)))
+           `(~@body)))))
 
 (comment
   (macroexpand '(def-element-macros))

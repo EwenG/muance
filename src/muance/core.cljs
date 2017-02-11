@@ -25,6 +25,10 @@
 ;; Incremented on every call to open when the patching process is in a subtree of a newly
 ;; created node. Decremented on every call to close in the same subtree 
 (def ^{:dynamic true :private true} *new-node* nil)
+;; Set to the value of the moved node when a moved node is met, unless if was already set before
+;; Thus it keeps the value of the higher moved node in the tree, even if child nodes are
+;; themselves moved. This is necessary to know when to unset the value 
+(def ^{:dynamic true :private true} *moved-vnode* nil)
 ;; true after a call to open, false after a call to close
 (def ^{:dynamic true :private true} *in-attrs-position* nil)
 ;; stack didMount hooks in order to call them top down after the patching process
@@ -33,10 +37,15 @@
 (def ^{:dynamic true :private true} *state-ref* nil)
 
 (def ^:dynamic *state* nil)
-;; Set to the value of the moved node when a moved node is met, unless if was already set before
-;; Thus it keeps the value of the higher moved node in the tree, even if child nodes are
-;; themselves moved. This is necessary to know when to unset the value 
-(def ^:dynamic *did-move* nil)
+
+;; debugging pupose only
+(defn print-vnode [vnode]
+  (loop [i 0]
+    (when (<= i index-keymap-invalid)
+      (when (not= i index-parent-vnode)
+        (pr (aget vnode i)) (print " "))
+      (recur (inc i))))
+  (prn))
 
 (defn- remove-vnode-key [vnode key]
   (aset vnode index-parent-vnode nil)
@@ -57,16 +66,15 @@
 (defn- recursively-call-unmount-hooks [root]
   (let [vnode (bottom-first-child root)]
     (loop [vnode vnode]
+      (when-let [children (aget vnode index-children)]
+        (let [children-count (.-length children)]
+          (loop [i 1]
+            (when (< i children-count)
+              (recursively-call-unmount-hooks (aget vnode index-children i))
+              (recur (inc i))))))
+      (call-unmount-hooks vnode)
       (when-not (identical? vnode root)
-        (call-unmount-hooks vnode)
-        (when-let [children (aget vnode index-children)]
-          (let [children-count (.-length children)]
-            (loop [i 1]
-              (when (< i children-count)
-                (recursively-call-unmount-hooks (aget vnode index-children i))
-                (recur (inc i))))))
-        (recur (aget vnode index-parent-vnode)))))
-  (call-unmount-hooks root))
+        (recur (aget vnode index-parent-vnode))))))
 
 (defn- remove-node [vnode]
   (when vnode
@@ -88,13 +96,25 @@
     (let [children-count (aget vnode index-children-count)
           children-length (.-length children)]
       (loop [l children-length]
-        (when (not= l children-count)
+        (when (> l children-count)
           (let [removed-vnode (.pop children)
                 k (aget removed-vnode index-key)]
             (if k
               (remove-vnode-key removed-vnode key)
-              (remove-node removed-vnode)))))
+              (remove-node removed-vnode)))
+          (recur (dec l))))
       (aset vnode index-children-count 0))))
+
+(defn- clean-attrs [vnode]
+  (when-let [attrs (aget vnode index-attrs)]
+    (let [attrs-count (aget vnode index-attrs-count)
+          attrs-length (.-length attrs)]
+      (loop [l attrs-length]
+        (when (> l attrs-count)
+          (.pop attrs)
+          (.removeAttribute (aget vnode index-node) (.pop attrs))
+          (recur (- l 2))))
+      (aset vnode index-attrs-count 0))))
 
 (defn- new-element [vnode index tag]
   (let [new-node (.createElement js/document tag)
@@ -181,20 +201,21 @@
             (and (nil? key) (nil? prev-key) (= typeid prev-typeid)))
       ;; same key or no keys and same typeid -> nothing to do
       (do
-        ;; TODO assert tags are equal when same key 
-        (when key nil)
+        (when (and key (= key prev-key))
+          (assert (= tag prev-typeid) (str "Nodes with same key but different tags or typeid. Keys: " key " " prev-key)))
         (set! *current-vnode* prev)
-        (willUpdate prev *props* *state*))
+        (willUpdate *props* *state*))
       (if moved-vnode
-        (do (when (nil? *did-move*)
-              (set! *did-move* moved-vnode))
-            (willUpdate prev *props* *state*)
-            (dom/insertSiblingBefore (aget moved-vnode index-node)
-                                     (aget prev index-node))
+        (do (when (nil? *moved-vnode*)
+              (set! *moved-vnode* moved-vnode))
+            (willUpdate *props* *state*)
+            (.insertBefore (aget *current-vnode* index-node)
+                           (aget moved-vnode index-node)
+                           (when prev (aget prev index-node)))
             (aset parent-children vnode-index moved-vnode)
             (if (aget moved-vnode index-parent-vnode)
-              ;; moved-vnode and the moved-vnode is amongs the next children -> splice
-              ;; between the current index and the index of the moved node
+              ;; moved-vnode is amongs the next children -> splice between the
+              ;; current index and the index of the moved node
               (splice-to parent-children (inc vnode-index) prev moved-vnode)
               (do
                 ;; the moved-node is coming from the previous children -> replace the node
@@ -237,31 +258,76 @@
                                 new-vnode new-vnode-key false)))
 
 (defn close []
+  (clean-attrs *current-vnode*)
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
   (set! *in-attrs-position* false)
   (when (> *new-node* 0)
     (set! *new-node* (dec *new-node*)))
-  (when (identical? *did-move* *current-vnode*)
-    (set! *did-move* nil))
+  (when (identical? *moved-vnode* *current-vnode*)
+    (set! *moved-vnode* nil))
   (set! *current-vnode* (aget *current-vnode* index-parent-vnode)))
 
 (defn close-lifecycle [didMount didUpdate]
+  (clean-attrs *current-vnode*)
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
   (set! *in-attrs-position* false)
   (if (> *new-node* 0)
-    (do (set! *new-node* (dec *new-node*))
-        (.push *didMounts* didMount)
-        (.push *didMounts* *props*)
-        (.push *didMounts* *state*))
-    (didUpdate *props* *state*))
-  (when (identical? *did-move* *current-vnode*)
-    (set! *did-move* nil))
+    (when didMount
+      (set! *new-node* (dec *new-node*))
+      (.push *didMounts* didMount)
+      (.push *didMounts* *props*)
+      (.push *didMounts* *state*))
+    (when didUpdate (didUpdate *props* *state*)))
+  (when (identical? *moved-vnode* *current-vnode*)
+    (set! *moved-vnode* nil))
   (set! *current-vnode* (aget *current-vnode* index-parent-vnode)))
 
-(defn attr [key val])
-(defn attr-static [key val])
+(defn set-attribute [node key val]
+  (if (nil? val)
+    (.removeAttribute node key)
+    (.setAttribute node key val)))
+
+(defn attr [key val]
+  (let [val (when (not (nil? val)) (str val))
+        attrs-index (or (aget *current-vnode* index-attrs-count) 0)
+        prev-attrs (or (aget *current-vnode* index-attrs) #js [])
+        prev-node (aget *current-vnode* index-node)]
+    (when-not (aget *current-vnode* index-attrs)
+      (aset *current-vnode* index-attrs prev-attrs))
+    (loop [i 0]
+      (let [k (aget prev-attrs i)]
+        (if (< i attrs-index)
+          (if (= key k)
+            (let [v (aget prev-attrs (inc i))]
+              (when (not= v val)
+                (aset prev-attrs (inc i) val)
+                (set-attribute prev-node key val)))
+            (recur (+ i 2)))
+          (do
+            (aset *current-vnode* index-attrs-count (+ attrs-index 2))
+            (cond (nil? k)
+                  (do (aset prev-attrs i key)
+                      (aset prev-attrs (inc i) val)
+                      (set-attribute prev-node key val))
+                  (= key k)
+                  (let [v (aget prev-attrs (inc i))]
+                    (when (not= v val)
+                      (aset prev-attrs (inc i) val)
+                      (set-attribute prev-node key val)))
+                  :else
+                  ;; (not= key k)
+                  (do (.removeAttribute prev-node k)
+                      (aset prev-attrs i key)
+                      (aset prev-attrs (inc i) val)
+                      (set-attribute prev-node key val)))))))))
+
+(defn attr-static [key val]
+  (when (and *new-node* (not (nil? val)))
+    (let [node (aget *current-vnode* index-node)]
+      (.setAttribute node key (str val)))))
+
 (defn class1 [c1])
 (defn class2 [c1 c2])
 (defn class3 [c1 c2 c3])
@@ -290,7 +356,7 @@
               *props* nil
               *state* nil
               *state-ref* nil
-              *did-move* nil]
+              *moved-vnode* nil]
       (if props?
         (patch-fn props)
         (patch-fn))
@@ -305,7 +371,7 @@
               *props* nil
               *state* nil
               *state-ref* nil
-              *did-move* nil]
+              *moved-vnode* nil]
       (o/set node node-data-key *current-vnode*)
       (dom/removeChildren node)
       (if props?
@@ -318,3 +384,6 @@
 (defn patch
   ([node patch-fn] (patch-impl node patch-fn false nil))
   ([node patch-fn props] (patch-impl node patch-fn true props)))
+
+(defn did-move? []
+  (boolean *moved-vnode*))
