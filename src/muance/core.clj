@@ -29,7 +29,7 @@
 (declare compile-styles)
 (declare attrs)
 (declare class)
-(declare style)
+(declare styles)
 
 (defn compile-form [env form]
   (cond (and (seq? form) (symbol? (first form)))
@@ -39,7 +39,7 @@
                 (compile-element-macro env (::tag (meta clj-var)) (rest form))
                 (= #'attrs clj-var) (compile-attrs env form)
                 (= #'class clj-var) (compile-classes env form)
-                (= #'style clj-var) (compile-styles env form)
+                (= #'styles clj-var) (compile-styles env form)
                 (= 'cljs.core/str var) `(~'text ~form)
                 :else form))
         (string? form) `(~'text ~form)
@@ -114,10 +114,10 @@
     (let [class-fn (cond (= 1 (count classes)) `class1
                          (= 2 (count classes)) `class2
                          (= 3 (count classes)) `class3
-                         :else `class)]
+                         :else `classn)]
       `(~class-fn ~@classes))))
 
-(defn compile-classes [env & classes]
+(defn compile-classes [env [m & classes]]
   (if (empty? classes)
     nil
     (let [static? (every? (partial static? env) classes)
@@ -127,11 +127,11 @@
                          (= 2 (count classes)) `class-static2
                          (and static? (= 3 (count classes))) `class-static3
                          (= 3 (count classes)) `class3
-                         static? `class-static
+                         static? `classn-static
                          :else `class)]
       `(~class-fn ~@classes))))
 
-(defmacro style [& styles]
+(defmacro styles [& styles]
   (cond (empty? styles)
         nil
         (not (even? (count styles)))
@@ -140,7 +140,7 @@
                                      `(style ~(as-str k) ~v))]
                 (cons 'do compiled-attrs))))
 
-(defn compile-style [env [m & styles]]
+(defn compile-styles [env [m & styles]]
   (cond (empty? styles)
         nil
         (not (even? (count styles)))

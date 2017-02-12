@@ -32,7 +32,8 @@
   (m/patch (.getElementById js/document "root") f false)
 
   (m/defcomp aa [e]
-    (m/div (when e (m/attrs "ff" "ff")) (when e (m/attrs "class" e "dd" 33))))
+    (m/div (when e (m/attrs "ff" "ff")) (when e (m/attrs "class" e "dd" 33))
+           (m/p (m/class e "r" 3 4 5 6))))
   (m/patch (.getElementById js/document "root") aa false)
 
   (macroexpand-1 '(m/p (m/div)))

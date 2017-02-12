@@ -105,14 +105,23 @@
           (recur (dec l))))
       (aset vnode index-children-count 0))))
 
+(defn set-attribute [node key val]
+  (cond (nil? val) (.removeAttribute node key)
+        (fn? val) (o/set node key val)
+        :else (.setAttribute node key val)))
+
+(defn remove-attribute [node val key]
+  (if (fn? val)
+    (o/set node key nil)
+    (.removeAttribute node key)))
+
 (defn- clean-attrs [vnode]
   (when-let [attrs (aget vnode index-attrs)]
     (let [attrs-count (aget vnode index-attrs-count)
           attrs-length (.-length attrs)]
       (loop [l attrs-length]
         (when (> l attrs-count)
-          (.pop attrs)
-          (.removeAttribute (aget vnode index-node) (.pop attrs))
+          (remove-attribute (aget vnode index-node) (.pop attrs) (.pop attrs))
           (recur (- l 2))))
       (aset vnode index-attrs-count 0))))
 
@@ -239,25 +248,25 @@
           (set! *current-vnode* vnode))))
     *current-vnode*))
 
-(defn open [tag]
+(defn- open [tag]
   (open-lifecycle-impl tag noop noop new-vnode false))
 
-(defn open-lifecycle [tag willUpdate willUnmount]
+(defn- open-lifecycle [tag willUpdate willUnmount]
   (if willUnmount
     (open-lifecycle-impl tag (or willUpdate noop) willUnmount new-vnode-unmount true)
     (open-lifecycle-impl tag (or willUpdate noop) noop new-vnode false)))
 
-(defn open-typeid [tag typeid]
+(defn- open-typeid [tag typeid]
   (open-typeid-lifecycle-impl tag typeid noop noop new-vnode new-vnode-key false))
 
-(defn open-typeid-lifecycle [tag typeid willUpdate willUnmount]
+(defn- open-typeid-lifecycle [tag typeid willUpdate willUnmount]
   (if willUnmount
     (open-typeid-lifecycle-impl tag typeid (or willUpdate noop) willUnmount
                                 new-vnode-unmount new-vnode-key-unmount true)
     (open-typeid-lifecycle-impl tag typeid (or willUpdate noop) noop
                                 new-vnode new-vnode-key false)))
 
-(defn close []
+(defn- close []
   (clean-attrs *current-vnode*)
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
@@ -268,7 +277,7 @@
     (set! *moved-vnode* nil))
   (set! *current-vnode* (aget *current-vnode* index-parent-vnode)))
 
-(defn close-lifecycle [didMount didUpdate]
+(defn- close-lifecycle [didMount didUpdate]
   (clean-attrs *current-vnode*)
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
@@ -284,12 +293,7 @@
     (set! *moved-vnode* nil))
   (set! *current-vnode* (aget *current-vnode* index-parent-vnode)))
 
-(defn set-attribute [node key val]
-  (if (nil? val)
-    (.removeAttribute node key)
-    (.setAttribute node key val)))
-
-(defn attr [key val]
+(defn- attr [key val]
   (let [val (when (not (nil? val)) (str val))
         attrs-index (or (aget *current-vnode* index-attrs-count) 0)
         prev-attrs (or (aget *current-vnode* index-attrs) #js [])
@@ -318,26 +322,57 @@
                       (set-attribute prev-node key val)))
                   :else
                   ;; (not= key k)
-                  (do (.removeAttribute prev-node k)
-                      (aset prev-attrs i key)
-                      (aset prev-attrs (inc i) val)
-                      (set-attribute prev-node key val)))))))))
+                  (let [v (aget prev-attrs (inc i))]
+                    (remove-attribute prev-node v k)
+                    (aset prev-attrs i key)
+                    (aset prev-attrs (inc i) val)
+                    (set-attribute prev-node key val)))))))))
 
-(defn attr-static [key val]
+(defn- attr-static [key val]
   (when (and *new-node* (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
-      (.setAttribute node key (str val)))))
+      (set-attribute node key (str val)))))
 
-(defn class1 [c1])
-(defn class2 [c1 c2])
-(defn class3 [c1 c2 c3])
-(defn class [classes])
-(defn class-static1 [c1])
-(defn class-static2 [c1 c2])
-(defn class-static3 [c1 c2 c3])
-(defn class-static [& classes])
-(defn style [key val])
-(defn style-static [key val])
+(defn- class1 [c1]
+  (attr "class" c1))
+
+(defn- class2 [c1 c2]
+  (if (and (nil? c1) (nil? c2))
+    (attr "class" nil)
+    (attr "class" (str c1 " " c2))))
+
+(defn- class3 [c1 c2 c3]
+  (if (and (nil? c1) (nil? c2) (nil? c3))
+    (attr "class" nil)
+    (attr "class" (str c1 " " c2 " " c3))))
+
+(defn- classn [& classes]
+  (assert (> (count classes) 1))
+  (if (every? nil? classes)
+    (attr "class" nil)
+    (attr "class" (reduce #(str %1 " " %2) classes))))
+
+(defn- class-static1 [c1]
+  (attr-static "class" c1))
+
+(defn- class-static2 [c1 c2]
+  (if (and (nil? c1) (nil? c2))
+    (attr-static "class" nil)
+    (attr-static "class" (str c1 " " c2))))
+
+(defn- class-static3 [c1 c2 c3]
+  (if (and (nil? c1) (nil? c2) (nil? c3))
+    (attr-static "class" nil)
+    (attr-static "class" (str c1 " " c2 " " c3))))
+
+(defn- classn-static [& classes]
+  (assert (> (count classes) 1))
+  (if (every? nil? classes)
+    (attr-static "class" nil)
+    (attr-static "class" (reduce #(str %1 " " %2) classes))))
+
+(defn- style [key val])
+(defn- style-static [key val])
 
 (defn- call-did-mount-hooks [did-mount-hooks]
   (loop [l (dec (.-length did-mount-hooks))]
