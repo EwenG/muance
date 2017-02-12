@@ -33,8 +33,10 @@
 
   (m/defcomp aa [e]
     (m/div (when e (m/attrs "ff" "ff")) (when e (m/attrs "class" e "dd" 33))
-           (m/p (m/class e "r" 3 4 5 6))))
-  (m/patch (.getElementById js/document "root") aa false)
+           (m/p (m/class e "r" 3 4 5 6)
+                (when e (m/styles "position" "relative"))
+                (m/styles "backgroundColor" e))))
+  (m/patch (.getElementById js/document "root") aa nil)
 
   (macroexpand-1 '(m/p (m/div)))
   (macroexpand-1 '(m/p (str "e") (m/div {:key 3 :lifecycle {:did-mount #(prn "e") :will-update (fn [])}})))

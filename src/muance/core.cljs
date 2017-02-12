@@ -105,25 +105,37 @@
           (recur (dec l))))
       (aset vnode index-children-count 0))))
 
-(defn set-attribute [node key val]
+(defn- set-attribute [node key val]
   (cond (nil? val) (.removeAttribute node key)
         (fn? val) (o/set node key val)
         :else (.setAttribute node key val)))
 
-(defn remove-attribute [node val key]
+(defn- remove-attribute [node val key]
   (if (fn? val)
     (o/set node key nil)
     (.removeAttribute node key)))
 
-(defn- clean-attrs [vnode]
-  (when-let [attrs (aget vnode index-attrs)]
-    (let [attrs-count (aget vnode index-attrs-count)
+(defn- set-style [node key val]
+  (o/set (.-style node) key val))
+
+(defn- remove-style [node val key]
+  (o/set (.-style node) key ""))
+
+(defn- clean-attrs-impl [vnode index-count index remove-fn]
+  (when-let [attrs (aget vnode index)]
+    (let [attrs-count (aget vnode index-count)
           attrs-length (.-length attrs)]
       (loop [l attrs-length]
         (when (> l attrs-count)
-          (remove-attribute (aget vnode index-node) (.pop attrs) (.pop attrs))
+          (remove-fn (aget vnode index-node) (.pop attrs) (.pop attrs))
           (recur (- l 2))))
-      (aset vnode index-attrs-count 0))))
+      (aset vnode index-count 0))))
+
+(defn- clean-attrs [vnode]
+  (clean-attrs-impl vnode index-attrs-count index-attrs remove-attribute))
+
+(defn- clean-styles [vnode]
+  (clean-attrs-impl vnode index-styles-count index-styles remove-style))
 
 (defn- new-element [vnode index tag]
   (let [new-node (.createElement js/document tag)
@@ -211,7 +223,9 @@
       ;; same key or no keys and same typeid -> nothing to do
       (do
         (when (and key (= key prev-key))
-          (assert (= tag prev-typeid) (str "Nodes with same key but different tags or typeid. Keys: " key " " prev-key)))
+          (assert
+           (= tag prev-typeid)
+           (str "Nodes with same key but different tags or typeid. Keys: " key " " prev-key)))
         (set! *current-vnode* prev)
         (willUpdate *props* *state*))
       (if moved-vnode
@@ -268,6 +282,7 @@
 
 (defn- close []
   (clean-attrs *current-vnode*)
+  (clean-styles *current-vnode*)
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
   (set! *in-attrs-position* false)
@@ -279,6 +294,7 @@
 
 (defn- close-lifecycle [didMount didUpdate]
   (clean-attrs *current-vnode*)
+  (clean-styles *current-vnode*)
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
   (set! *in-attrs-position* false)
@@ -293,13 +309,12 @@
     (set! *moved-vnode* nil))
   (set! *current-vnode* (aget *current-vnode* index-parent-vnode)))
 
-(defn- attr [key val]
-  (let [val (when (not (nil? val)) (str val))
-        attrs-index (or (aget *current-vnode* index-attrs-count) 0)
-        prev-attrs (or (aget *current-vnode* index-attrs) #js [])
+(defn- attr-impl [key val index-count index set-fn remove-fn]
+  (let [attrs-index (or (aget *current-vnode* index-count) 0)
+        prev-attrs (or (aget *current-vnode* index) #js [])
         prev-node (aget *current-vnode* index-node)]
-    (when-not (aget *current-vnode* index-attrs)
-      (aset *current-vnode* index-attrs prev-attrs))
+    (when-not (aget *current-vnode* index)
+      (aset *current-vnode* index prev-attrs))
     (loop [i 0]
       (let [k (aget prev-attrs i)]
         (if (< i attrs-index)
@@ -307,26 +322,30 @@
             (let [v (aget prev-attrs (inc i))]
               (when (not= v val)
                 (aset prev-attrs (inc i) val)
-                (set-attribute prev-node key val)))
+                (set-fn prev-node key val)))
             (recur (+ i 2)))
           (do
-            (aset *current-vnode* index-attrs-count (+ attrs-index 2))
+            (aset *current-vnode* index-count (+ attrs-index 2))
             (cond (nil? k)
                   (do (aset prev-attrs i key)
                       (aset prev-attrs (inc i) val)
-                      (set-attribute prev-node key val))
+                      (set-fn prev-node key val))
                   (= key k)
                   (let [v (aget prev-attrs (inc i))]
                     (when (not= v val)
                       (aset prev-attrs (inc i) val)
-                      (set-attribute prev-node key val)))
+                      (set-fn prev-node key val)))
                   :else
                   ;; (not= key k)
                   (let [v (aget prev-attrs (inc i))]
-                    (remove-attribute prev-node v k)
+                    (remove-fn prev-node v k)
                     (aset prev-attrs i key)
                     (aset prev-attrs (inc i) val)
-                    (set-attribute prev-node key val)))))))))
+                    (set-fn prev-node key val)))))))))
+
+(defn- attr [key val]
+  (attr-impl key (when (not (nil? val)) (str val))
+             index-attrs-count index-attrs set-attribute remove-attribute))
 
 (defn- attr-static [key val]
   (when (and *new-node* (not (nil? val)))
@@ -371,8 +390,13 @@
     (attr-static "class" nil)
     (attr-static "class" (reduce #(str %1 " " %2) classes))))
 
-(defn- style [key val])
-(defn- style-static [key val])
+(defn- style [key val]
+  (attr-impl key (str val) index-styles-count index-styles set-style remove-style))
+
+(defn- style-static [key val]
+  (when (and *new-node* (not (nil? val)))
+    (let [node (aget *current-vnode* index-node)]
+      (set-style node key (str val)))))
 
 (defn- call-did-mount-hooks [did-mount-hooks]
   (loop [l (dec (.-length did-mount-hooks))]
