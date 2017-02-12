@@ -17,6 +17,8 @@
 (def ^{:private true} index-keymap 11)
 (def ^{:private true} index-keymap-invalid 12)
 
+(def ^{:private true} index-text 3)
+
 (def ^{:private true} node-data-key "muance.core/node-data")
 (def ^{:private true} node-state-ref-key "muance.core/node-state-ref")
 
@@ -144,6 +146,13 @@
                    (when ref-vnode (aget ref-vnode index-node)))
     new-node))
 
+(defn- new-text-element [vnode index text]
+  (let [new-node (.createTextNode js/document text)
+        ref-vnode (aget vnode index-children (inc index))]
+    (.insertBefore (aget vnode index-node) new-node
+                   (when ref-vnode (aget ref-vnode index-node)))
+    new-node))
+
 (defn- noop [vnode props state])
 
 (defn- init-keymap [keymap]
@@ -171,6 +180,9 @@
         vnode #js [typeid *current-vnode* element 0 nil 0 nil #js [willUnmount] 0 nil key]]
     (o/set keymap key vnode)
     vnode))
+
+(defn- new-text-vnode [element text]
+  #js [-1 *current-vnode* element text])
 
 (defn- splice-to [nodes index moved-node to-node]
   (assert (not (nil? moved-node)) (str "Duplicate key: " (aget to-node index-key)) )
@@ -200,8 +212,7 @@
         (if prev-key
           (remove-vnode-key prev prev-key)
           (remove-node prev))
-        (set! *current-vnode* vnode)))
-    *current-vnode*))
+        (set! *current-vnode* vnode)))))
 
 (defn- open-typeid-lifecycle-impl [tag typeid willUpdate willUnmount
                                    new-vnode new-vnode-key set-state-ref?]
@@ -259,8 +270,7 @@
           (if prev-key
             (remove-vnode-key prev prev-key)
             (remove-node prev))
-          (set! *current-vnode* vnode))))
-    *current-vnode*))
+          (set! *current-vnode* vnode))))))
 
 (defn- open [tag]
   (open-lifecycle-impl tag noop noop new-vnode false))
@@ -279,6 +289,25 @@
                                 new-vnode-unmount new-vnode-key-unmount true)
     (open-typeid-lifecycle-impl tag typeid (or willUpdate noop) noop
                                 new-vnode new-vnode-key false)))
+
+(defn- text-node [t]
+  (let [vnode-index (or (aget *current-vnode* index-children-count) 0)
+        parent-children (or (aget *current-vnode* index-children) #js [])
+        prev (aget parent-children vnode-index)
+        prev-key (when prev (aget prev index-key))
+        prev-typeid (when prev (aget prev index-typeid))]
+    (aset *current-vnode* index-children-count (inc vnode-index))
+    (when-not (aget *current-vnode* index-children)
+      (aset *current-vnode* index-children parent-children))
+    (if (= -1 prev-typeid)
+      (when (not= (aget prev index-text) t)
+        (o/set (aget prev index-node) "nodeValue" t))
+      (let [element (new-text-element *current-vnode* vnode-index t)
+            vnode (new-text-vnode element t)]
+        (aset parent-children vnode-index vnode)
+        (if prev-key
+          (remove-vnode-key prev prev-key)
+          (remove-node prev))))))
 
 (defn- close []
   (clean-attrs *current-vnode*)

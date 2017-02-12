@@ -36,7 +36,7 @@
            (m/p (m/class e "r" 3 4 5 6)
                 (when e (m/styles "position" "relative"))
                 (m/styles "backgroundColor" e))))
-  (m/patch (.getElementById js/document "root") aa nil)
+  (m/patch (.getElementById js/document "root") aa "black")
 
   (macroexpand-1 '(m/p (m/div)))
   (macroexpand-1 '(m/p (str "e") (m/div {:key 3 :lifecycle {:did-mount #(prn "e") :will-update (fn [])}})))
@@ -50,6 +50,9 @@
 
   (m/with-opts #js {:e "e"} 3)
 
-  (m/defcomp cc "eee" [props] 3)
+  (m/defcomp cc "eee" [props]
+    (m/p (if props (m/text props) (m/p "00")) "gg"))
+  
+  (m/patch (.getElementById js/document "root") cc 444)
   
   )

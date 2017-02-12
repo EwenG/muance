@@ -1,5 +1,6 @@
 (ns muance.core
   (:refer-clojure :exclude [class])
+  (:require [cljs.analyzer :as ana])
   (:import [cljs.tagged_literals JSValue]))
 
 (defonce typeid (atom 0))
@@ -30,6 +31,7 @@
 (declare attrs)
 (declare class)
 (declare styles)
+(declare text)
 
 (defn compile-form [env form]
   (cond (and (seq? form) (symbol? (first form)))
@@ -40,9 +42,9 @@
                 (= #'attrs clj-var) (compile-attrs env form)
                 (= #'class clj-var) (compile-classes env form)
                 (= #'styles clj-var) (compile-styles env form)
-                (= 'cljs.core/str var) `(~'text ~form)
+                (= #'text clj-var) `(muance.core/text-node ~form)
                 :else form))
-        (string? form) `(~'text ~form)
+        (string? form) `(muance.core/text-node ~form)
         :else form))
 
 (defn local-dep [{name :name fn-var :fn-var
@@ -189,23 +191,22 @@
             ~@(map compile-form body)
             (close))))))
 
+(defmacro text [& text]
+  `(muance.core/text-node (cljs.core/str ~@text)))
+
 (defmacro with-key [key & body]
-  `(if cljs.core/*assert*
-     (let [current-node# *current-vnode*
-           children-count# (or (cljs.core/aget current-node# index-children-count) 0)]
-       (set! *key* ~key)
-       ~@body
-       (set! *key* nil)
-       (cljs.core/assert (cljs.core/and
-                          (cljs.core/identical? current-node# *current-vnode*)
-                          (cljs.core/<=
-                           (cljs.core/-
-                            (or (cljs.core/aget *current-vnode* index-children-count) 0)
-                            children-count#) 1))
-                         "with-key must enclose a single child"))
-     (do (set! *key* ~key)
-         ~@body
-         (set! *key* nil))))
+  `(let [current-node# *current-vnode*
+         children-count# (or (cljs.core/aget current-node# index-children-count) 0)]
+     (set! *key* ~key)
+     ~@body
+     (set! *key* nil)
+     (cljs.core/assert (cljs.core/and
+                        (cljs.core/identical? current-node# *current-vnode*)
+                        (cljs.core/<=
+                         (cljs.core/-
+                          (or (cljs.core/aget current-node# index-children-count) 0)
+                          children-count#) 1))
+                       "with-key must wrap a single node")))
 
 (defn with-macro-meta [tag]
   (with-meta tag (assoc (meta tag) ::tag (str tag))))
@@ -237,15 +238,22 @@
         params (if (string? docstring-or-params) (first params-body) docstring-or-params)
         _ (assert (<= (count params) 1) (str name " must take 0 or 1 argument"))
         [params-with-props props-sym] (params-with-props (first params))
-        parent-props-sym (gensym "parent-props")
         body (if (string? docstring-or-params) (rest params-body) params-body)]
     `(defn ~name ~(if params-with-props `[~params-with-props] [])
-       ~@(if props-sym
-           `((cljs.core/let [~parent-props-sym *props*]
-               (set! *props* ~props-sym)
-               ~@body
-               (set! *props* ~parent-props-sym)))
-           `(~@body)))))
+       (cljs.core/let [parent-props# *props*
+                       current-node# *current-vnode*
+                       children-count# (or
+                                        (cljs.core/aget current-node# index-children-count) 0)]
+         (set! *props* ~props-sym)
+         ~@body
+         (set! *props* parent-props#)
+         (cljs.core/assert (cljs.core/and
+                            (cljs.core/identical? current-node# *current-vnode*)
+                            (cljs.core/<=
+                             (cljs.core/-
+                              (or (cljs.core/aget current-node# index-children-count) 0)
+                              children-count#) 1))
+                           (str "the component " ~(str (symbol (str ana/*cljs-ns*) (str name))) " must not create more than one top level node"))))))
 
 (comment
   (macroexpand '(def-element-macros))
