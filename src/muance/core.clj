@@ -6,6 +6,10 @@
 (defonce typeid (atom 0))
 (def element-macros #{'a 'abbr 'acronym 'address 'div 'p})
 
+(defn inc-typeid [t]
+  ;; MAX_SAFE_INTEGER
+  (if (= t 9007199254740991) 0 (inc t)))
+
 (defn safe-symbol [x]
   (when x (symbol x)))
 
@@ -25,12 +29,6 @@
       (symbol (str ns-name) (name sym)))))
 
 (declare compile-element-macro)
-(declare compile-attrs)
-(declare compile-classes)
-(declare compile-styles)
-(declare attrs)
-(declare class)
-(declare styles)
 (declare text)
 
 (defn compile-form [env form]
@@ -38,10 +36,7 @@
         (let [var (cljs-resolve env (first form))
               clj-var (resolve var)]
           (cond (::tag (meta clj-var))
-                (compile-element-macro env (::tag (meta clj-var)) (rest form))
-                (= #'attrs clj-var) (compile-attrs env form)
-                (= #'class clj-var) (compile-classes env form)
-                (= #'styles clj-var) (compile-styles env form)
+                (compile-element-macro env (::tag (meta clj-var)) nil (rest form))
                 (= #'text clj-var) `(muance.core/text-node ~form)
                 :else form))
         (string? form) `(muance.core/text-node ~form)
@@ -90,130 +85,97 @@
         (keyword? x) (name x)
         :else `(cljs.core/str ~x)))
 
-(defmacro attrs [& attributes]
-  (cond (empty? attributes)
-        nil
-        (not (even? (count attributes)))
-        (throw (IllegalArgumentException. "attrs expects an even number of forms"))
-        :else (let [compiled-attrs (for [[k v] (partition 2 attributes)]
-                                     `(attr ~(as-str k) ~v))]
-                (cons 'do compiled-attrs))))
+(defn attributes [body]
+  (let [attrs (->> (partition 2 body)
+                   (take-while (comp keyword? first)))]
+    (when (not (empty? attrs))
+      (assert (apply distinct? (map first attrs))
+              (str "duplicate attributes: " (pr-str (map first attrs)))))
+    (into {} (map vec attrs))))
 
-(defn compile-attrs [env [m & attributes]]
-  (cond (empty? attributes)
-        nil
-        (not (even? (count attributes)))
-        (throw (IllegalArgumentException. "attrs expects an even number of forms"))
-        :else (let [compiled-attrs (for [[k v] (partition 2 attributes)]
-                                     (if (and (static? env k) (static? env v))
-                                       `(attr-static ~(as-str k) ~v)
-                                       `(attr ~(as-str k) ~v)))]
-                (cons 'do compiled-attrs))))
+(defn validate-attributes [{:keys [hooks styles on] :as attributes}]
+  (when (contains? attributes :hooks) (assert (map? hooks)))
+  (when (contains? attributes :styles) (assert (map? styles)))
+  (when (contains? attributes :on) (assert (map? on))))
 
-(defmacro class [& classes]
-  (if (empty? classes)
-    nil
-    (let [class-fn (cond (= 1 (count classes)) `class1
-                         (= 2 (count classes)) `class2
-                         (= 3 (count classes)) `class3
-                         :else `classn)]
-      `(~class-fn ~@classes))))
+(defn validate-comp-attributes [{:keys [hooks] :as attributes}]
+  (when (contains? attributes :hooks) (assert (map? hooks))))
 
-(defn compile-classes [env [m & classes]]
-  (if (empty? classes)
-    nil
-    (let [static? (every? (partial static? env) classes)
-          class-fn (cond (and static? (= 1 (count classes))) `class-static1
-                         (= 1 (count classes)) `class1
-                         (and static? (= 2 (count classes))) `class-static2
-                         (= 2 (count classes)) `class-static2
-                         (and static? (= 3 (count classes))) `class-static3
-                         (= 3 (count classes)) `class3
-                         static? `classn-static
-                         :else `class)]
-      `(~class-fn ~@classes))))
+(defn body-without-attributes [body attributes]
+  (drop (* 2 (count attributes)) body))
 
-(defmacro styles [& styles]
-  (cond (empty? styles)
-        nil
-        (not (even? (count styles)))
-        (throw (IllegalArgumentException. "style expects an even number of forms"))
-        :else (let [compiled-attrs (for [[k v] (partition 2 styles)]
-                                     `(style ~(as-str k) ~v))]
-                (cons 'do compiled-attrs))))
+(defn class-call [env class]
+  (if (vector? class)
+    (if (every? (partial static? env) class)
+      (reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class)
+      (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
+        `(attr "class" (cljs.core/str ~@classes-with-spaces))))
+    (if (static? env class)
+      `(attr-static "class" ~class)
+      `(attr "class" ~class))))
 
-(defn compile-styles [env [m & styles]]
-  (cond (empty? styles)
-        nil
-        (not (even? (count styles)))
-        (throw (IllegalArgumentException. "style expects an even number of forms"))
-        :else (let [compiled-attrs (for [[k v] (partition 2 styles)]
-                                     (if (and (static? env k) (static? env v))
-                                       `(style-static ~(as-str k) ~v)
-                                       `(style ~(as-str k) ~v)))]
-                (cons 'do compiled-attrs))))
+(defn style-calls [env styles]
+  (map (fn [[k v]]
+         (if (static? env v)
+           `(style-static ~(as-str k) ~v)
+           `(style ~(as-str k) ~v)))
+       styles))
 
-(defn lifecycle-as-map [lifecycle]
-  (if (instance? JSValue lifecycle)
-    (.-val lifecycle)
-    {:didMount `(goog.object/get ~lifecycle "didMount")
-     :willUpdate `(goog.object/get ~lifecycle "willUpdate")
-     :didUpdate `(goog.object/get ~lifecycle "didUpdate")
-     :willUnmount `(goog.object/get ~lifecycle "willUnmount")}))
+(defn on-calls [env ons]
+  (map (fn [[k v]]
+         (cond (vector? v)
+               (if (every? (partial static? env) v)
+                 `(on-static ~(as-str k) (cljs.core/array ~@v))
+                 `(on ~(as-str k) (cljs.core/array ~@v)))
+               (and (instance? JSValue v) (vector? (.-val v)))
+               (if (every? (partial static? env) v)
+                 `(on-static ~(as-str k) (cljs.core/array ~@(.-val v)))
+                 `(on ~(as-str k) (cljs.core/array ~@(.-val v))))
+               :else (if (static? env v)
+                       `(on-static ~(as-str k) ~v)
+                       `(on ~(as-str k) ~v))))
+       ons))
+
+(defn attribute-calls [env attrs]
+  (reduce (fn [calls [k v]]
+            (case k
+              :key calls
+              :hooks calls
+              :class (conj calls (class-call env v))
+              :styles (into calls (style-calls env v))
+              :on (into calls (on-calls env v))
+              (conj calls (if (static? env v)
+                            `(attr-static ~(as-str k) ~v)
+                            `(attr ~(as-str k) ~v)))))
+          '() attrs))
 
 (defn compile-element-macro
-  ([env tag body]
-   (let [compile-form (partial compile-form env)
-         {:keys [didMount willUpdate didUpdate willUnmount] :as lifecycle}
-         (cond
-           (= :lifecycle (first body)) (-> body second lifecycle-as-map)
-           :else nil)
-         body (if lifecycle (drop 2 body) body)]
-     (if lifecycle
-       `(do (open-lifecycle ~tag ~willUpdate ~willUnmount)
-            ~@(map compile-form body)
-            (close-lifecycle ~didMount ~didUpdate))
-       `(do (open ~tag)
-            ~@(map compile-form body)
-            (close)))))
-  ([env tag typeid body]
-   (let [compile-form (partial compile-form env)
-         {:keys [didMount willUpdate didUpdate willUnmount] :as lifecycle}
-         (cond
-           (= :lifecycle (first body)) (-> body second lifecycle-as-map)
-           :else nil)
-         body (if lifecycle (drop 2 body) body)]
-     (if lifecycle
-       `(do (open-typeid-lifecycle ~tag ~typeid ~willUpdate ~willUnmount)
-            ~@(map compile-form body)
-            (close-lifecycle ~didMount ~didUpdate))
-       `(do (open-typeid ~tag ~typeid)
-            ~@(map compile-form body)
-            (close))))))
+  [env tag typeid body]
+  (let [compile-form (partial compile-form env)
+        {key :key
+         {willUpdate :willUpdate willUnmount :willUnmount
+          didMount :didMount didUpdate :didUpdate} :hooks :as attrs} (attributes body)
+        _ (validate-attributes attrs)
+        body (body-without-attributes body attrs)]
+    (if (or key willUpdate willUnmount didMount didUpdate)
+      `(do (open-opts ~tag ~typeid ~key ~willUpdate ~willUnmount)
+           ~@(attribute-calls env attrs)
+           ~@(map compile-form body)
+           (close-opts ~didMount ~didUpdate))
+      `(do (open ~tag ~typeid)
+           ~@(attribute-calls env attrs)
+           ~@(map compile-form body)
+           (close)))))
 
 (defmacro text [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
-
-(defmacro with-key [key & body]
-  `(let [current-node# *current-vnode*
-         children-count# (or (cljs.core/aget current-node# index-children-count) 0)]
-     (set! *key* ~key)
-     ~@body
-     (set! *key* nil)
-     (cljs.core/assert (cljs.core/and
-                        (cljs.core/identical? current-node# *current-vnode*)
-                        (cljs.core/<=
-                         (cljs.core/-
-                          (or (cljs.core/aget current-node# index-children-count) 0)
-                          children-count#) 1))
-                       "with-key must wrap a single node")))
 
 (defn with-macro-meta [tag]
   (with-meta tag (assoc (meta tag) ::tag (str tag))))
 
 (defmacro make-element-macro [tag]
   `(defmacro ~(with-macro-meta tag) [~'& ~'body]
-     (swap! typeid inc)
+     (swap! typeid inc-typeid)
      (compile-element-macro ~'&env ~(str tag) @typeid ~'body)))
 
 (defmacro def-element-macros []
@@ -232,32 +194,68 @@
         :else nil))
 
 (defmacro defcomp [name docstring-or-params & params-body]
-  (let [name (if (string? docstring-or-params)
+  (swap! typeid inc-typeid)
+  (let [typeid (str @typeid)
+        name (if (string? docstring-or-params)
                (vary-meta name assoc :doc docstring-or-params)
                name)
         params (if (string? docstring-or-params) (first params-body) docstring-or-params)
         _ (assert (<= (count params) 1) (str name " must take 0 or 1 argument"))
         [params-with-props props-sym] (params-with-props (first params))
-        body (if (string? docstring-or-params) (rest params-body) params-body)]
-    `(defn ~name ~(if params-with-props `[~params-with-props] [])
-       (cljs.core/let [parent-props# *props*
-                       current-node# *current-vnode*
-                       children-count# (or
-                                        (cljs.core/aget current-node# index-children-count) 0)]
-         (set! *props* ~props-sym)
-         ~@body
-         (set! *props* parent-props#)
-         (cljs.core/assert (cljs.core/and
-                            (cljs.core/identical? current-node# *current-vnode*)
-                            (cljs.core/<=
-                             (cljs.core/-
-                              (or (cljs.core/aget current-node# index-children-count) 0)
-                              children-count#) 1))
-                           (str "the component " ~(str (symbol (str ana/*cljs-ns*) (str name))) " must not create more than one top level node"))))))
+        body (if (string? docstring-or-params) (rest params-body) params-body)
+        {key :key
+         {willUpdate :willUpdate willUnmount :willUnmount
+          didMount :didMount didUpdate :didUpdate
+          willReceiveProps :willReceiveProps
+          getInitialState :getInitialState} :hooks :as attrs} (attributes body)
+        _ (validate-comp-attributes attrs)
+        body (body-without-attributes body attrs)]
+    `(defn ~name
+       ~(if params-with-props
+          `([~params-with-props]
+            (~name nil ~params-with-props))
+          `([]
+            (~name nil)))
+       ~(if params-with-props
+          `([key# ~params-with-props]
+            (cljs.core/let [parent-props# *props*
+                            parent-state-ref# *state-ref*]
+              ~(if (or key willUpdate willUnmount didMount didUpdate
+                       willReceiveProps getInitialState)
+                 `(open-comp-opts ~typeid ~key true ~props-sym ~name
+                                  ~willUpdate ~willUnmount
+                                  ~willReceiveProps ~getInitialState)
+                 `(open-comp ~typeid true ~props-sym ~name))
+              (cljs.core/when-not *skip*
+                ~@body
+                ~(if (or key willUpdate willUnmount didMount didUpdate
+                         willReceiveProps getInitialState)
+                   `(close-comp-opts ~didMount ~didUpdate)
+                   `(close-comp)))
+              (set! *skip* false)
+              (set! *props* parent-props#)
+              (set! *state-ref* parent-state-ref#)
+              (set! *state* (when parent-state-ref# (cljs.core/deref parent-state-ref#)))))
+          `([key#]
+            (cljs.core/let [parent-props# *props*
+                            parent-state-ref# *state-ref*]
+              ~(if (or key willUpdate willUnmount didMount didUpdate
+                         willReceiveProps getInitialState)
+                 `(open-comp-opts ~typeid ~key false nil ~name
+                                  ~willUpdate ~willUnmount
+                                  ~willReceiveProps ~getInitialState)
+                 `(open-comp ~typeid false nil ~name))
+              (cljs.core/when-not *skip*
+                ~@body
+                ~(if (or key willUpdate willUnmount didMount didUpdate
+                         willReceiveProps getInitialState)
+                   `(close-comp-opts ~didMount ~didUpdate)
+                   `(close-comp)))
+              (set! *skip* false)
+              (set! *props* parent-props#)
+              (set! *state-ref* parent-state-ref#)
+              (set! *state* (when parent-state-ref# (cljs.core/deref parent-state-ref#)))))))))
 
 (comment
   (macroexpand '(def-element-macros))
-
-  (p (p))
-  
   )
