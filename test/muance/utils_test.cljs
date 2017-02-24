@@ -26,6 +26,11 @@
     (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
     (-write writer "]")))
 
+(defn with-namespace [vnode-map vnode]
+  (if-let [node (aget vnode m/index-node)]
+    (assoc vnode-map :namespaceURI (.-namespaceURI node))
+    vnode-map))
+
 (defn format-vnode [vnode]
   (when vnode
     (let [vnode-keys (if (= -1 (aget vnode m/index-typeid)) vnode-keys-text vnode-keys)
@@ -57,12 +62,13 @@
           (persistent! arr))))))
 
 (defn format-tree [vnode]
-  (let [vnode (format-vnode vnode)]
-    (if (= -1 (aget vnode m/index-typeid))
-      vnode
-      (if (contains? vnode :children)
-        (update-in vnode [:children] format-children)
-        vnode))))
+  (let [vnode-map (format-vnode vnode)
+        vnode-map (with-namespace vnode-map vnode)]
+    (if (= -1 (aget vnode-map m/index-typeid))
+      vnode-map
+      (if (contains? vnode-map :children)
+        (update-in vnode-map [:children] format-children)
+        vnode-map))))
 
 (defn root-vnode []
   (when-let [root (.getElementById js/document "root")]

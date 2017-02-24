@@ -1,17 +1,51 @@
 (ns muance.core
-  (:refer-clojure :exclude [class])
-  (:require [cljs.analyzer :as ana])
+  (:refer-clojure :exclude [class map meta time set symbol use filter])
+  (:require [cljs.analyzer :as ana]
+            [clojure.string :as string]
+            [clojure.set :refer [union]])
   (:import [cljs.tagged_literals JSValue]))
 
+(alias 'c 'clojure.core)
+
 (defonce typeid (atom 0))
-(def element-macros #{'a 'abbr 'acronym 'address 'div 'p})
+
+(def html-elements #{'a 'abbr 'acronym 'address 'applet 'area 'article 'aside 'audio 'b 'base
+                     'basefont 'bdi 'bdo 'big 'blockquote 'body 'br 'button 'canvas 'caption
+                     'center 'cite 'code 'col 'colgroup 'datalist 'dd 'del 'details 'dfn
+                     'dialog 'dir 'div 'dl 'dt 'em 'embed 'fieldset 'figcaption 'figure 'font
+                     'footer 'form 'frame 'frameset 'h1 'h2 'h3 'h4 'h5 'h6 'head 'header
+                     'hr 'html 'i 'iframe 'img 'input 'ins 'kbd 'keygen 'label 'legend 'li
+                     'link 'main 'map 'mark 'menu 'menuitem 'meta 'meter 'nav 'noframes
+                     'noscript 'object 'ol 'optgroup 'option 'output 'p 'param 'picture 'pre
+                     'progress 'q 'rp 'rt 'ruby 's 'samp 'script 'section 'select 'small
+                     'source 'span 'strike 'strong 'style 'sub 'summary 'sup 'table 'tbody
+                     'td 'textarea 'tfoot 'th 'thead 'time 'title 'tr 'track 'tt 'u 'ul 'var
+                     'video 'wbr})
+
+(def svg-elements #{'a 'altGlyph 'altGlyphDef 'altGlyphItem 'animate 'animateColor
+                    'animateMotion 'animateTransform 'audio 'canvas 'circle 'clipPath
+                    'color-profile 'cursor 'defs 'desc 'discard 'ellipse 'feBlend
+                    'feColorMatrix 'feComponentTransfer 'feComposite 'feConvolveMatrix
+                    'feDiffuseLighting 'feDisplacementMap 'feDistantLight 'feDropShadow
+                    'feFlood 'feFuncA 'feFuncB 'feFuncG 'feFuncR 'feGaussianBlur 'feImage
+                    'feMerge 'feMergeNode 'feMorphology 'feOffset 'fePointLight
+                    'feSpecularLighting 'feSpotLight 'feTile 'feTurbulence 'filter 'font
+                    'font-face 'font-face-format 'font-face-name 'font-face-src 'font-face-uri
+                    'foreignObject 'g 'glyph 'glyphRef 'hatch 'hatchpath 'hkern 'iframe 'image
+                    'line 'linearGradient 'marker 'mask 'mesh 'meshgradient 'meshpatch
+                    'meshrow 'metadata 'missing-glyph 'mpath 'path 'pattern 'polygon 'polyline
+                    'radialGradient 'rect 'script 'set 'solidcolor 'stop 'style 'svg 'switch
+                    'symbol 'text 'textPath 'title 'tref 'tspan 'unknown 'use 'video 'view
+                    'vkern})
+
+(def element-macros (union html-elements svg-elements))
 
 (defn inc-typeid [t]
   ;; MAX_SAFE_INTEGER
   (if (= t 9007199254740991) 0 (inc t)))
 
 (defn safe-symbol [x]
-  (when x (symbol x)))
+  (when x (c/symbol x)))
 
 (defn resolve-namespace
   [env sym ns]
@@ -26,7 +60,7 @@
           ns-name (if sym-ns
                     (->> (:ns env) (resolve-namespace env sym-ns))
                     (get-in env [:ns :name]))]
-      (symbol (str ns-name) (name sym)))))
+      (c/symbol (str ns-name) (name sym)))))
 
 (declare compile-element-macro)
 (declare text)
@@ -35,8 +69,8 @@
   (cond (and (seq? form) (symbol? (first form)))
         (let [var (cljs-resolve env (first form))
               clj-var (resolve var)]
-          (cond (::tag (meta clj-var))
-                (compile-element-macro env (::tag (meta clj-var)) nil (rest form))
+          (cond (::tag (c/meta clj-var))
+                (compile-element-macro env (::tag (c/meta clj-var)) nil (rest form))
                 (= #'text clj-var) `(muance.core/text-node ~form)
                 :else form))
         (string? form) `(muance.core/text-node ~form)
@@ -75,8 +109,8 @@
         (keyword? x) true
         (number? x) true
         (and (seq? x) (= (first x) `quote)) true
-        (vector? x) (every? static? x)
-        (map? x) (every? static? x)
+        (vector? x) (every? (partial static? env) x)
+        (map? x) (every? (partial static? env) x)
         (symbol? x) (static-symbol? env x)
         :else false))
 
@@ -85,18 +119,30 @@
         (keyword? x) (name x)
         :else `(cljs.core/str ~x)))
 
+(def attr-as-prop
+  {:class :className
+   :for :htmlFor
+   :checked :checked
+   :multiple :multiple
+   :muted :muted
+   :selected :selected
+   :value :value})
+
 (defn attributes [body]
   (let [attrs (->> (partition 2 body)
                    (take-while (comp keyword? first)))]
     (when (not (empty? attrs))
-      (assert (apply distinct? (map first attrs))
-              (str "duplicate attributes: " (pr-str (map first attrs)))))
-    (into {} (map vec attrs))))
+      (assert (apply distinct? (c/map first attrs))
+              (str "duplicate attributes: " (pr-str (c/map first attrs)))))
+    (into {} (c/map vec attrs))))
+
+(defn handler? [h]
+  (and (vector? h) (keyword? (first h))))
 
 (defn validate-attributes [{:keys [hooks styles on] :as attributes}]
   (when (contains? attributes :hooks) (assert (map? hooks)))
   (when (contains? attributes :styles) (assert (map? styles)))
-  (when (contains? attributes :on) (assert (map? on))))
+  (when (contains? attributes :on) (assert (or (handler? on) (every? handler? on)))))
 
 (defn validate-comp-attributes [{:keys [hooks] :as attributes}]
   (when (contains? attributes :hooks) (assert (map? hooks))))
@@ -107,47 +153,87 @@
 (defn class-call [env class]
   (if (vector? class)
     (if (every? (partial static? env) class)
-      (reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class)
+      `(prop-static "className" ~(reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class))
       (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
-        `(attr "class" (cljs.core/str ~@classes-with-spaces))))
+        `(prop "className" (cljs.core/str ~@classes-with-spaces))))
     (if (static? env class)
-      `(attr-static "class" ~class)
-      `(attr "class" ~class))))
+      `(prop-static "className" ~class)
+      `(prop "className" ~class))))
 
 (defn style-calls [env styles]
-  (map (fn [[k v]]
-         (if (static? env v)
-           `(style-static ~(as-str k) ~v)
-           `(style ~(as-str k) ~v)))
-       styles))
+  (c/map (fn [[k v]]
+           (if (string/starts-with? (str k) ":--")
+             (if (static? env v)
+               `(css-style-custom-static ~(as-str k) ~v)
+               `(css-style-custom ~(as-str k) ~v))
+             (if (static? env v)
+               `(css-style-static ~(as-str k) ~v)
+               `(css-style ~(as-str k) ~v))))
+         styles))
 
 (defn on-calls [env ons]
-  (map (fn [[k v]]
-         (cond (vector? v)
-               (if (every? (partial static? env) v)
-                 `(on-static ~(as-str k) (cljs.core/array ~@v))
-                 `(on ~(as-str k) (cljs.core/array ~@v)))
-               (and (instance? JSValue v) (vector? (.-val v)))
-               (if (every? (partial static? env) v)
-                 `(on-static ~(as-str k) (cljs.core/array ~@(.-val v)))
-                 `(on ~(as-str k) (cljs.core/array ~@(.-val v))))
-               :else (if (static? env v)
-                       `(on-static ~(as-str k) ~v)
-                       `(on ~(as-str k) ~v))))
-       ons))
+  (let [static? (partial static? env)
+        ons (if (handler? ons) [ons] ons)]
+    (c/map (fn [[k f & args]]
+             (if (and (static? f) (every? static? args))
+               (let [l (count args)]
+                 (cond (= 0 l) `(on-static ~(as-str k) ~f)
+                       (= 1 l) `(on-static1 ~(as-str k) ~f ~(nth args 0))
+                       (= 2 l) `(on-static2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
+                       :else `(on-static3 ~(as-str k) ~f
+                                          ~(nth args 0)
+                                          ~(nth args 1)
+                                          ~(nth args 2))))
+               (let [l (count args)]
+                 (cond (= 0 l) `(on ~(as-str k) ~f)
+                       (= 1 l) `(on1 ~(as-str k) ~f ~(nth args 0))
+                       (= 2 l) `(on2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
+                       :else `(on3 ~(as-str k) ~f
+                                   ~(nth args 0)
+                                   ~(nth args 1)
+                                   ~(nth args 2))))))
+           ons)))
 
-(defn attribute-calls [env attrs]
+(defn attribute-calls [env tag attrs]
   (reduce (fn [calls [k v]]
-            (case k
-              :key calls
-              :hooks calls
-              :class (conj calls (class-call env v))
-              :styles (into calls (style-calls env v))
-              :on (into calls (on-calls env v))
+            (cond
+              (= k :key) calls
+              (= k :hooks) calls
+              (= k :class) (conj calls (class-call env v))
+              (= k :styles) (into calls (style-calls env v))
+              (= k :on)  (into calls (on-calls env v))
+              (and (= tag "input") (= k :value))
               (conj calls (if (static? env v)
-                            `(attr-static ~(as-str k) ~v)
-                            `(attr ~(as-str k) ~v)))))
+                            `(prop-static "value" ~v)
+                            `(input-value ~v)))
+              (contains? attr-as-prop k)
+              (conj calls (if (static? env v)
+                            `(prop-static ~(as-str (get attr-as-prop k)) ~v)
+                            `(prop ~(as-str (get attr-as-prop k)) ~v)))
+              (string/starts-with? (str k) ":xlink")
+              (conj calls (if (static? env v)
+                            `(attr-ns-static xlink-ns ~(as-str k) ~v)
+                            `(attr-ns xlink-ns ~(as-str k) ~v)))
+              (string/starts-with? (str k) ":xml")
+              (conj calls (if (static? env v)
+                            `(attr-ns-static xml-ns ~(as-str k) ~v)
+                            `(attr-ns xml-ns ~(as-str k) ~v)))
+              :else (conj calls (if (static? env v)
+                                  `(attr-static ~(as-str k) ~v)
+                                  `(attr ~(as-str k) ~v)))))
           '() attrs))
+
+(defn with-svg-namespace [tag body]
+  (case tag
+    "svg" `(do
+             (set! *svg-namespace* (cljs.core/inc *svg-namespace*))
+             ~@body
+             (set! *svg-namespace* (cljs.core/dec *svg-namespace*)))
+    ;; *svg-namespace* is set to 0 in open-impl
+    "foreignObject" `(let [parent-svg-namespace# *svg-namespace*]
+                       ~@body
+                       (set! *svg-namespace* parent-svg-namespace#))
+    `(do ~@body)))
 
 (defn compile-element-macro
   [env tag typeid body]
@@ -158,20 +244,22 @@
         _ (validate-attributes attrs)
         body (body-without-attributes body attrs)]
     (if (or key willUpdate willUnmount didMount didUpdate)
-      `(do (open-opts ~tag ~typeid ~key ~willUpdate ~willUnmount)
-           ~@(attribute-calls env attrs)
-           ~@(map compile-form body)
-           (close-opts ~didMount ~didUpdate))
-      `(do (open ~tag ~typeid)
-           ~@(attribute-calls env attrs)
-           ~@(map compile-form body)
-           (close)))))
+      (with-svg-namespace tag
+        `((open-opts ~tag ~typeid ~key ~willUpdate ~willUnmount)
+          ~@(attribute-calls env tag attrs)
+          ~@(c/map compile-form body)
+          (close-opts ~didMount ~didUpdate)))
+      (with-svg-namespace tag
+        `((open ~tag ~typeid)
+          ~@(attribute-calls env tag attrs)
+          ~@(c/map compile-form body)
+          (close))))))
 
 (defmacro text [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
 
 (defn with-macro-meta [tag]
-  (with-meta tag (assoc (meta tag) ::tag (str tag))))
+  (with-meta tag (assoc (c/meta tag) ::tag (str tag))))
 
 (defmacro make-element-macro [tag]
   `(defmacro ~(with-macro-meta tag) [~'& ~'body]

@@ -3,8 +3,9 @@
             [cljs.test :refer [deftest testing is run-tests]]
             [goog.dom :as dom]
             [goog.object :as o]
-            [muance.core :as m :include-macros]
-            [muance.utils-test :as utils]))
+            [muance.core :as m :include-macros true]
+            [muance.utils-test :as utils]
+            [muance.custom-tags :as tag :include-macros true]))
 
 
 (defn root-static-f []
@@ -110,21 +111,111 @@
 
 
 
-(defn attrs-f [props]
-  (m/div :class [(get props 0) 33]
-         :ff (when false "e")
-         :gg "t"
-         :styles {:background (when (get props 1) "black") :color (get props 1)}))
+(defn attrs-f [{:keys [class1 dyn-attr bg-cond color
+                       input-value
+                       for-val
+                       checkbox-value checkbox-checked
+                       selected]}]
+  (m/div :class [class1 "f"]
+         :foo nil
+         :static-attr "static-attr"
+         :dyn-attr dyn-attr
+         :styles {:background (when bg-cond "black") :color color})
+  (m/input :type "text" :value input-value)
+  (m/label :for for-val)
+  (m/input :type "checkbox" :value checkbox-value :checked checkbox-checked)
+  (m/input :type "file" :name "rr" :multiple true)
+  (m/select
+   (m/option :value "val1")
+   (m/option :value "val2" :selected selected)))
 
 (deftest attrs []
   (utils/new-root)
 
-  (m/patch (utils/root) attrs-f [88 "red"])
+  (m/patch (utils/root) attrs-f
+           {:class1 88 :dyn-attr "val" :bg-cond true :color "green"
+            :input-value "tt4"
+            :for-val "rr2"
+            :checkbox-value nil :checkbox-checked "e"
+            :selected false})
   )
+
+
+
+(defn text-f [x]
+  (m/div (if x (m/text "e") (m/p)) "<p></p>"))
+
+(deftest text []
+  (utils/new-root)
+
+  (m/patch (utils/root) text-f false))
+
+
+
+(defn custom-tag-f []
+  (tag/custom-tag))
+
+(deftest custom-tag []
+  (utils/new-root)
+  
+  (m/patch (utils/root) custom-tag-f))
+
+
+
+
+(defn svg-f [href]
+  (m/svg :xml:lang "fr"
+   (m/svg
+    (m/a :xlink:href href)
+    (when true (m/altGlyph))
+    (m/foreignObject
+     (m/svg)
+     (m/div)))
+   (m/font-face-name))
+  (m/p))
+
+(deftest svg []
+  (utils/new-root)
+  
+  (m/patch (utils/root) svg-f "rr"))
+
+
+
+
+(defn custom-css-f [bg]
+  (m/div :styles {:--background bg}))
+
+(deftest custom-css []
+  (utils/new-root)
+  
+  (m/patch (utils/root) custom-css-f "red"))
+
+
+(defn click-handler [e state attr1 attr2 attr3 attr4]
+  (prn "clicked")
+  (prn state)
+  (prn attr1)
+  (prn attr2)
+  (prn attr3))
+
+(defn mouseover-handler [e state]
+  (prn "mouseover2")
+  (prn state))
+
+(defn handlers-f [[w handler c]]
+  (m/div
+         :class c
+         :on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
+         :styles {:width w :height "500px"}))
+
+(deftest handlers []
+  (utils/new-root)
+  
+  (m/patch (utils/root) handlers-f ["503px" click-handler "class4"]))
 
 
 (comment
 
   (cljs.pprint/pprint (utils/root-vnode))
-  
+
   )
