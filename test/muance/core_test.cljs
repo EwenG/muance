@@ -5,11 +5,12 @@
             [goog.object :as o]
             [muance.core :as m :include-macros true]
             [muance.utils-test :as utils]
-            [muance.custom-tags :as tag :include-macros true]))
+            [muance.custom-tags :as tag :include-macros true])
+  (:require-macros [muance.h :as h]))
 
 
 (defn root-static-f []
-  (m/div) (m/p))
+  (h/div) (h/p))
 
 (deftest root-static []
   (utils/new-root)
@@ -18,7 +19,7 @@
 
 
 (defn static-f []
-  (m/div (m/div) (m/p) (m/div)))
+  (h/div (h/div) (h/p) (h/div)))
 
 (deftest static []
   (utils/new-root)
@@ -34,8 +35,8 @@
 (defn root-nodes-f [nodes]
   (doseq [n nodes]
     (case n
-      :p (m/p)
-      :div (m/div))))
+      :p (h/p)
+      :div (h/div))))
 
 (deftest root-nodes []
   (utils/new-root)
@@ -47,11 +48,11 @@
 
 
 (defn nodes-f [nodes]
-  (m/div
+  (h/div
    (doseq [n nodes]
      (case n
-       :p (m/p)
-       :div (m/div)))))
+       :p (h/p)
+       :div (h/div)))))
 
 (deftest nodes []
   (utils/new-root)
@@ -70,11 +71,11 @@
                [-1 1 3 4 5]])
 
 (defn keyed-f [keys]
-  (m/div
+  (h/div
    (doseq [k keys]
      (if (= -1 k)
-       (m/p)
-       (m/p :key k)))))
+       (h/p)
+       (h/p :key k)))))
 
 (deftest keyed []
   (utils/new-root)
@@ -97,10 +98,10 @@
 
 
 (defn mismatch-key-typeid-f [x]
-  (m/div
+  (h/div
    (if x
-     (do (m/div :key 1) (m/p :key 2))
-     (do (m/div :key 2) (m/p :key 1)))))
+     (do (h/div :key 1) (h/p :key 2))
+     (do (h/div :key 2) (h/p :key 1)))))
 
 (deftest mismatch-key-typeid []
   (utils/new-root)
@@ -109,9 +110,9 @@
   (m/patch (utils/root) mismatch-key-typeid-f false))
 
 (defn match-key-typeid-f [x]
-  (let [x1 #(m/div :key 1)
-        x2 #(m/p :key 2)]
-    (m/div
+  (let [x1 #(h/div :key 1)
+        x2 #(h/p :key 2)]
+    (h/div
      (if x
        (do (x1) (x2))
        (do (x2) (x1))))))
@@ -129,18 +130,18 @@
                        for-val
                        checkbox-value checkbox-checked
                        selected]}]
-  (m/div :class [class1 "f"]
+  (h/div :class [class1 "f"]
          :foo nil
          :static-attr "static-attr"
          :dyn-attr dyn-attr
          :styles {:background (when bg-cond "black") :color color})
-  (m/input :type "text" :value input-value)
-  (m/label :for for-val)
-  (m/input :type "checkbox" :value checkbox-value :checked checkbox-checked)
-  (m/input :type "file" :name "rr" :multiple true)
-  (m/select
-   (m/option :value "val1")
-   (m/option :value "val2" :selected selected)))
+  (h/input :type "text" :value input-value)
+  (h/label :for for-val)
+  (h/input :type "checkbox" :value checkbox-value :checked checkbox-checked)
+  (h/input :type "file" :name "rr" :multiple true)
+  (h/select
+   (h/option :value "val1")
+   (h/option :value "val2" :selected selected)))
 
 (deftest attrs []
   (utils/new-root)
@@ -156,7 +157,7 @@
 
 
 (defn text-f [x]
-  (m/div (if x (m/text2 "e") (m/p)) "<p></p>"))
+  (h/div (if x (m/text "e") (h/p)) "<p></p>"))
 
 (deftest text []
   (utils/new-root)
@@ -177,15 +178,15 @@
 
 
 (defn svg-f [href]
-  (m/svg :xml:lang "fr"
-   (m/svg
-    (m/a :xlink:href href)
-    (when true (m/altGlyph))
-    (m/foreignObject
-     (m/svg)
-     (m/div)))
-   (m/font-face-name))
-  (m/p))
+  (h/svg :xml:lang "fr"
+   (h/svg
+    (h/a :xlink:href href)
+    (when true (h/altGlyph))
+    (h/foreignObject
+     (h/svg)
+     (h/div)))
+   (h/font-face-name))
+  (h/p))
 
 (deftest svg []
   (utils/new-root)
@@ -196,7 +197,7 @@
 
 
 (defn custom-css-f [bg]
-  (m/div :styles {:--background bg}))
+  (h/div :styles {:--background bg}))
 
 (deftest custom-css []
   (utils/new-root)
@@ -216,7 +217,7 @@
   (prn state))
 
 (defn handlers-f [[w handler c]]
-  (m/div
+  (h/div
    :class c
    :on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
    :styles {:width w :height "500px"}))

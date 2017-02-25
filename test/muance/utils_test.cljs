@@ -13,8 +13,9 @@
 (defn root []
   (.getElementById js/document "root"))
 
-(def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs :state-ref
-                 :unmount :key :key-moved :keymap :keymap-invalid])
+(def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs :unmount
+                 :state-ref :key :key-moved :keymap :keymap-invalid])
+(def comp-keys (-> vnode-keys (assoc 5 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
 
 (deftype Parent [typeid])
@@ -33,7 +34,11 @@
 
 (defn format-vnode [vnode]
   (when vnode
-    (let [vnode-keys (if (= -1 (aget vnode m/index-typeid)) vnode-keys-text vnode-keys)
+    (let [vnode-keys (cond (= -1 (aget vnode m/index-typeid))
+                           vnode-keys-text
+                           (nil? (aget vnode m/index-node))
+                           comp-keys
+                           :else vnode-keys)
           l (.-length vnode)]
       (loop [m (transient {})
              i 0]

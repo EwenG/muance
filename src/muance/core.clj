@@ -1,51 +1,16 @@
 (ns muance.core
-  (:refer-clojure :exclude [class map meta time set symbol use filter])
   (:require [cljs.analyzer :as ana]
-            [clojure.string :as string]
-            [clojure.set :refer [union]])
+            [clojure.string :as string])
   (:import [cljs.tagged_literals JSValue]))
 
-(alias 'c 'clojure.core)
-
 (defonce typeid (atom 0))
-
-(def html-elements #{'a 'abbr 'acronym 'address 'applet 'area 'article 'aside 'audio 'b 'base
-                     'basefont 'bdi 'bdo 'big 'blockquote 'body 'br 'button 'canvas 'caption
-                     'center 'cite 'code 'col 'colgroup 'datalist 'dd 'del 'details 'dfn
-                     'dialog 'dir 'div 'dl 'dt 'em 'embed 'fieldset 'figcaption 'figure 'font
-                     'footer 'form 'frame 'frameset 'h1 'h2 'h3 'h4 'h5 'h6 'head 'header
-                     'hr 'html 'i 'iframe 'img 'input 'ins 'kbd 'keygen 'label 'legend 'li
-                     'link 'main 'map 'mark 'menu 'menuitem 'meta 'meter 'nav 'noframes
-                     'noscript 'object 'ol 'optgroup 'option 'output 'p 'param 'picture 'pre
-                     'progress 'q 'rp 'rt 'ruby 's 'samp 'script 'section 'select 'small
-                     'source 'span 'strike 'strong 'style 'sub 'summary 'sup 'table 'tbody
-                     'td 'textarea 'tfoot 'th 'thead 'time 'title 'tr 'track 'tt 'u 'ul 'var
-                     'video 'wbr})
-
-(def svg-elements #{'a 'altGlyph 'altGlyphDef 'altGlyphItem 'animate 'animateColor
-                    'animateMotion 'animateTransform 'audio 'canvas 'circle 'clipPath
-                    'color-profile 'cursor 'defs 'desc 'discard 'ellipse 'feBlend
-                    'feColorMatrix 'feComponentTransfer 'feComposite 'feConvolveMatrix
-                    'feDiffuseLighting 'feDisplacementMap 'feDistantLight 'feDropShadow
-                    'feFlood 'feFuncA 'feFuncB 'feFuncG 'feFuncR 'feGaussianBlur 'feImage
-                    'feMerge 'feMergeNode 'feMorphology 'feOffset 'fePointLight
-                    'feSpecularLighting 'feSpotLight 'feTile 'feTurbulence 'filter 'font
-                    'font-face 'font-face-format 'font-face-name 'font-face-src 'font-face-uri
-                    'foreignObject 'g 'glyph 'glyphRef 'hatch 'hatchpath 'hkern 'iframe 'image
-                    'line 'linearGradient 'marker 'mask 'mesh 'meshgradient 'meshpatch
-                    'meshrow 'metadata 'missing-glyph 'mpath 'path 'pattern 'polygon 'polyline
-                    'radialGradient 'rect 'script 'set 'solidcolor 'stop 'style 'svg 'switch
-                    'symbol 'text 'textPath 'title 'tref 'tspan 'unknown 'use 'video 'view
-                    'vkern})
-
-(def element-macros (union html-elements svg-elements))
 
 (defn inc-typeid [t]
   ;; MAX_SAFE_INTEGER
   (if (= t 9007199254740991) 0 (inc t)))
 
 (defn safe-symbol [x]
-  (when x (c/symbol x)))
+  (when x (symbol x)))
 
 (defn resolve-namespace
   [env sym ns]
@@ -60,18 +25,18 @@
           ns-name (if sym-ns
                     (->> (:ns env) (resolve-namespace env sym-ns))
                     (get-in env [:ns :name]))]
-      (c/symbol (str ns-name) (name sym)))))
+      (symbol (str ns-name) (name sym)))))
 
 (declare compile-element-macro)
-(declare text2)
+(declare text)
 
 (defn compile-form [env form]
   (cond (and (seq? form) (symbol? (first form)))
         (let [var (cljs-resolve env (first form))
               clj-var (resolve var)]
-          (cond (::tag (c/meta clj-var))
-                (compile-element-macro env (::tag (c/meta clj-var)) nil (rest form))
-                (= #'text2 clj-var) `(muance.core/text-node ~form)
+          (cond (::tag (meta clj-var))
+                (compile-element-macro env (::tag (meta clj-var)) nil (rest form))
+                (= #'text clj-var) `(muance.core/text-node ~form)
                 :else form))
         (string? form) `(muance.core/text-node ~form)
         :else form))
@@ -134,9 +99,9 @@
   (let [attrs (->> (partition 2 body)
                    (take-while (comp keyword? first)))]
     (when (not (empty? attrs))
-      (assert (apply distinct? (c/map first attrs))
-              (str "duplicate attributes: " (pr-str (c/map first attrs)))))
-    (into {} (c/map vec attrs))))
+      (assert (apply distinct? (map first attrs))
+              (str "duplicate attributes: " (pr-str (map first attrs)))))
+    (into {} (map vec attrs))))
 
 (defn handler? [h]
   (and (vector? h) (keyword? (first h))))
@@ -145,9 +110,6 @@
   (when (contains? attributes :hooks) (assert (map? hooks)))
   (when (contains? attributes :styles) (assert (map? styles)))
   (when (contains? attributes :on) (assert (or (handler? on) (every? handler? on)))))
-
-(defn validate-comp-attributes [{:keys [hooks] :as attributes}]
-  (when (contains? attributes :hooks) (assert (map? hooks))))
 
 (defn body-without-attributes [body attributes]
   (drop (* 2 (count attributes)) body))
@@ -163,38 +125,38 @@
       `(prop "className" ~class))))
 
 (defn style-calls [env styles]
-  (c/map (fn [[k v]]
-           (if (string/starts-with? (str k) ":--")
-             (if (static? env v)
-               `(css-style-custom-static ~(as-str k) ~v)
-               `(css-style-custom ~(as-str k) ~v))
-             (if (static? env v)
-               `(css-style-static ~(as-str k) ~v)
-               `(css-style ~(as-str k) ~v))))
-         styles))
+  (map (fn [[k v]]
+         (if (string/starts-with? (str k) ":--")
+           (if (static? env v)
+             `(style-custom-static ~(as-str k) ~v)
+             `(style-custom ~(as-str k) ~v))
+           (if (static? env v)
+             `(style-static ~(as-str k) ~v)
+             `(style ~(as-str k) ~v))))
+       styles))
 
 (defn on-calls [env ons]
   (let [static? (partial static? env)
         ons (if (handler? ons) [ons] ons)]
-    (c/map (fn [[k f & args]]
-             (if (and (static? f) (every? static? args))
-               (let [l (count args)]
-                 (cond (= 0 l) `(on-static ~(as-str k) ~f)
-                       (= 1 l) `(on-static1 ~(as-str k) ~f ~(nth args 0))
-                       (= 2 l) `(on-static2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
-                       :else `(on-static3 ~(as-str k) ~f
-                                          ~(nth args 0)
-                                          ~(nth args 1)
-                                          ~(nth args 2))))
-               (let [l (count args)]
-                 (cond (= 0 l) `(on ~(as-str k) ~f)
-                       (= 1 l) `(on1 ~(as-str k) ~f ~(nth args 0))
-                       (= 2 l) `(on2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
-                       :else `(on3 ~(as-str k) ~f
-                                   ~(nth args 0)
-                                   ~(nth args 1)
-                                   ~(nth args 2))))))
-           ons)))
+    (map (fn [[k f & args]]
+           (if (and (static? f) (every? static? args))
+             (let [l (count args)]
+               (cond (= 0 l) `(on-static ~(as-str k) ~f)
+                     (= 1 l) `(on-static1 ~(as-str k) ~f ~(nth args 0))
+                     (= 2 l) `(on-static2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
+                     :else `(on-static3 ~(as-str k) ~f
+                                        ~(nth args 0)
+                                        ~(nth args 1)
+                                        ~(nth args 2))))
+             (let [l (count args)]
+               (cond (= 0 l) `(on ~(as-str k) ~f)
+                     (= 1 l) `(on1 ~(as-str k) ~f ~(nth args 0))
+                     (= 2 l) `(on2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
+                     :else `(on3 ~(as-str k) ~f
+                                 ~(nth args 0)
+                                 ~(nth args 1)
+                                 ~(nth args 2))))))
+         ons)))
 
 (defn attribute-calls [env tag attrs]
   (reduce (fn [calls [k v]]
@@ -248,26 +210,19 @@
     (with-svg-namespace tag
       `((open ~tag ~typeid ~key ~willUpdate ~willUnmount)
         ~@(attribute-calls env tag attrs)
-        ~@(c/map compile-form body)
+        ~@(map compile-form body)
         (close ~didMount ~didUpdate)))))
 
-(defmacro text2 [& text]
+(defmacro text [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
 
 (defn with-macro-meta [tag]
-  (with-meta tag (assoc (c/meta tag) ::tag (str tag))))
+  (with-meta tag (assoc (meta tag) ::tag (str tag))))
 
 (defmacro make-element-macro [tag]
   `(defmacro ~(with-macro-meta tag) [~'& ~'body]
      (swap! typeid inc-typeid)
      (compile-element-macro ~'&env ~(str tag) @typeid ~'body)))
-
-(defmacro def-element-macros []
-  `(do
-     ~@(for [tag element-macros]
-         `(make-element-macro ~tag))))
-
-(def-element-macros)
 
 (defn params-with-props [params]
   (cond (symbol? params) [params params]
@@ -283,16 +238,12 @@
         name (if (string? docstring-or-params)
                (vary-meta name assoc :doc docstring-or-params)
                name)
+        name (vary-meta name assoc ::component true)
         params (if (string? docstring-or-params) (first params-body) docstring-or-params)
-        _ (assert (<= (count params) 1) (str name " must take 0 or 1 argument"))
+        _ (assert (<= (count params) 1)
+                  (str ana/*cljs-ns* "/" name " must take 0 or 1 parameter"))
         [params-with-props props-sym] (params-with-props (first params))
         body (if (string? docstring-or-params) (rest params-body) params-body)
-        {{willUpdate :willUpdate willUnmount :willUnmount
-          didMount :didMount didUpdate :didUpdate
-          willReceiveProps :willReceiveProps
-          getInitialState :getInitialState} :hooks :as attrs} (attributes body)
-        _ (validate-comp-attributes attrs)
-        body (body-without-attributes body attrs)
         key-sym (gensym "key")]
     `(defn ~name
        ~(if params-with-props
@@ -300,18 +251,30 @@
             (~name nil ~params-with-props))
           `([]
             (~name nil)))
-       (~(if params-with-props [~key-sym params-with-props] [~key-sym])
+       (~(if params-with-props [key-sym params-with-props] [key-sym])
         (cljs.core/let [parent-props# *props*
-                        parent-state-ref# *state-ref*]
+                        parent-state-ref# *state-ref*
+                        hooks# (goog.object/get ~name hooks-key)]
           (open-comp ~typeid ~(boolean params-with-props)
                      ~(when params-with-props props-sym)
-                     ~name ~key-sym
-                     ~willUpdate ~willUnmount
-                     ~willReceiveProps ~getInitialState)
+                     ~name ~key-sym hooks#)
           (cljs.core/when-not *skip*
             ~@body)
-          (close-comp parent-props# parent-state-ref#  ~didMount ~didUpdate))))))
+          (close-comp parent-props# parent-state-ref# hooks#))))))
 
-(comment
-  (macroexpand '(def-element-macros))
-  )
+(defmacro hooks [comp hooks-map]
+  (let [var (cljs-resolve &env comp)
+        clj-var (resolve var)
+        _ (assert (::component (meta clj-var)))
+        _ (assert (map? hooks-map))
+        {{willUpdate :willUpdate willUnmount :willUnmount
+          didMount :didMount didUpdate :didUpdate
+          willReceiveProps :willReceiveProps
+          getInitialState :getInitialState} :hooks :as attrs} hooks-map]
+    `(goog.object/set
+      ~comp
+      hooks-key
+      (cljs.core/array getInitialState willReceiveProps
+                       didMount didUpdate willUnmount willUpdate))))
+
+
