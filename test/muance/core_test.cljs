@@ -96,7 +96,6 @@
   (m/patch (utils/root) keyed-f [2 3 1 1 1]))
 
 
-
 (defn mismatch-key-typeid-f [x]
   (m/div
    (if x
@@ -108,6 +107,20 @@
   
   (m/patch (utils/root) mismatch-key-typeid-f true)
   (m/patch (utils/root) mismatch-key-typeid-f false))
+
+(defn match-key-typeid-f [x]
+  (let [x1 #(m/div :key 1)
+        x2 #(m/p :key 2)]
+    (m/div
+     (if x
+       (do (x1) (x2))
+       (do (x2) (x1))))))
+
+(deftest match-key-typeid []
+  (utils/new-root)
+  
+  (m/patch (utils/root) match-key-typeid-f true)
+  (m/patch (utils/root) match-key-typeid-f false))
 
 
 
@@ -143,12 +156,12 @@
 
 
 (defn text-f [x]
-  (m/div (if x (m/text "e") (m/p)) "<p></p>"))
+  (m/div (if x (m/text2 "e") (m/p)) "<p></p>"))
 
 (deftest text []
   (utils/new-root)
 
-  (m/patch (utils/root) text-f false))
+  (m/patch (utils/root) text-f true))
 
 
 
@@ -204,9 +217,9 @@
 
 (defn handlers-f [[w handler c]]
   (m/div
-         :class c
-         :on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
-         :styles {:width w :height "500px"}))
+   :class c
+   :on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
+   :styles {:width w :height "500px"}))
 
 (deftest handlers []
   (utils/new-root)

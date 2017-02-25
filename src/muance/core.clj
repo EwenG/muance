@@ -63,7 +63,7 @@
       (c/symbol (str ns-name) (name sym)))))
 
 (declare compile-element-macro)
-(declare text)
+(declare text2)
 
 (defn compile-form [env form]
   (cond (and (seq? form) (symbol? (first form)))
@@ -71,7 +71,7 @@
               clj-var (resolve var)]
           (cond (::tag (c/meta clj-var))
                 (compile-element-macro env (::tag (c/meta clj-var)) nil (rest form))
-                (= #'text clj-var) `(muance.core/text-node ~form)
+                (= #'text2 clj-var) `(muance.core/text-node ~form)
                 :else form))
         (string? form) `(muance.core/text-node ~form)
         :else form))
@@ -105,7 +105,9 @@
     (not (= 'muance.core/*state* (cljs-resolve env s)))))
 
 (defn static? [env x]
-  (cond (string? x) true
+  (cond (nil? x) true
+        (boolean? x) true
+        (string? x) true
         (keyword? x) true
         (number? x) true
         (and (seq? x) (= (first x) `quote)) true
@@ -243,19 +245,13 @@
           didMount :didMount didUpdate :didUpdate} :hooks :as attrs} (attributes body)
         _ (validate-attributes attrs)
         body (body-without-attributes body attrs)]
-    (if (or key willUpdate willUnmount didMount didUpdate)
-      (with-svg-namespace tag
-        `((open-opts ~tag ~typeid ~key ~willUpdate ~willUnmount)
-          ~@(attribute-calls env tag attrs)
-          ~@(c/map compile-form body)
-          (close-opts ~didMount ~didUpdate)))
-      (with-svg-namespace tag
-        `((open ~tag ~typeid)
-          ~@(attribute-calls env tag attrs)
-          ~@(c/map compile-form body)
-          (close))))))
+    (with-svg-namespace tag
+      `((open ~tag ~typeid ~key ~willUpdate ~willUnmount)
+        ~@(attribute-calls env tag attrs)
+        ~@(c/map compile-form body)
+        (close ~didMount ~didUpdate)))))
 
-(defmacro text [& text]
+(defmacro text2 [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
 
 (defn with-macro-meta [tag]
@@ -283,7 +279,7 @@
 
 (defmacro defcomp [name docstring-or-params & params-body]
   (swap! typeid inc-typeid)
-  (let [typeid (str @typeid)
+  (let [typeid @typeid
         name (if (string? docstring-or-params)
                (vary-meta name assoc :doc docstring-or-params)
                name)
@@ -291,58 +287,30 @@
         _ (assert (<= (count params) 1) (str name " must take 0 or 1 argument"))
         [params-with-props props-sym] (params-with-props (first params))
         body (if (string? docstring-or-params) (rest params-body) params-body)
-        {key :key
-         {willUpdate :willUpdate willUnmount :willUnmount
+        {{willUpdate :willUpdate willUnmount :willUnmount
           didMount :didMount didUpdate :didUpdate
           willReceiveProps :willReceiveProps
           getInitialState :getInitialState} :hooks :as attrs} (attributes body)
         _ (validate-comp-attributes attrs)
-        body (body-without-attributes body attrs)]
+        body (body-without-attributes body attrs)
+        key-sym (gensym "key")]
     `(defn ~name
        ~(if params-with-props
           `([~params-with-props]
             (~name nil ~params-with-props))
           `([]
             (~name nil)))
-       ~(if params-with-props
-          `([key# ~params-with-props]
-            (cljs.core/let [parent-props# *props*
-                            parent-state-ref# *state-ref*]
-              ~(if (or key willUpdate willUnmount didMount didUpdate
-                       willReceiveProps getInitialState)
-                 `(open-comp-opts ~typeid ~key true ~props-sym ~name
-                                  ~willUpdate ~willUnmount
-                                  ~willReceiveProps ~getInitialState)
-                 `(open-comp ~typeid true ~props-sym ~name))
-              (cljs.core/when-not *skip*
-                ~@body
-                ~(if (or key willUpdate willUnmount didMount didUpdate
-                         willReceiveProps getInitialState)
-                   `(close-comp-opts ~didMount ~didUpdate)
-                   `(close-comp)))
-              (set! *skip* false)
-              (set! *props* parent-props#)
-              (set! *state-ref* parent-state-ref#)
-              (set! *state* (when parent-state-ref# (cljs.core/deref parent-state-ref#)))))
-          `([key#]
-            (cljs.core/let [parent-props# *props*
-                            parent-state-ref# *state-ref*]
-              ~(if (or key willUpdate willUnmount didMount didUpdate
-                         willReceiveProps getInitialState)
-                 `(open-comp-opts ~typeid ~key false nil ~name
-                                  ~willUpdate ~willUnmount
-                                  ~willReceiveProps ~getInitialState)
-                 `(open-comp ~typeid false nil ~name))
-              (cljs.core/when-not *skip*
-                ~@body
-                ~(if (or key willUpdate willUnmount didMount didUpdate
-                         willReceiveProps getInitialState)
-                   `(close-comp-opts ~didMount ~didUpdate)
-                   `(close-comp)))
-              (set! *skip* false)
-              (set! *props* parent-props#)
-              (set! *state-ref* parent-state-ref#)
-              (set! *state* (when parent-state-ref# (cljs.core/deref parent-state-ref#)))))))))
+       (~(if params-with-props [~key-sym params-with-props] [~key-sym])
+        (cljs.core/let [parent-props# *props*
+                        parent-state-ref# *state-ref*]
+          (open-comp ~typeid ~(boolean params-with-props)
+                     ~(when params-with-props props-sym)
+                     ~name ~key-sym
+                     ~willUpdate ~willUnmount
+                     ~willReceiveProps ~getInitialState)
+          (cljs.core/when-not *skip*
+            ~@body)
+          (close-comp parent-props# parent-state-ref#  ~didMount ~didUpdate))))))
 
 (comment
   (macroexpand '(def-element-macros))
