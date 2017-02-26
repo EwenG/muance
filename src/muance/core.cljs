@@ -411,7 +411,7 @@
 (def ^{:private true} index-hooks-willUnmount 4)
 (def ^{:private true} index-hooks-willUpdate 5)
 
-(defn- default-get-initial-state [state] nil)
+(defn- default-get-initial-state [props] nil)
 
 (defn- open-comp [typeid props? props comp-fn key hooks]
   (set! *props* props)

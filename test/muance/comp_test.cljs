@@ -44,16 +44,86 @@
 
 
 
-(def keys-vec [[]
-               [1 -2 3 4 -5 6]
-               [1 3 -2 -5 6 4]
+(def keys-vec [[1 3 -2 -5 6 4]
                [3 1 -2 5 0 -6 7 4 8]
                [9 5 0]
                []
                [0 1 3 4 5]])
 
-(m/defcomp comp-attributes-props [props]
+(m/defcomp comp-keyed-props [props]
   (h/p :class "props" (m/text props)))
+
+(m/defcomp comp-keyed-no-props []
+  (h/p :class "no-props"))
+
+(m/defcomp comp-keyed-f [{:keys [keys props]}]
+  (h/div
+   (doseq [k keys]
+     (cond (= 0 k)
+           (comp-keyed-no-props)
+           (< k 0)
+           (comp-keyed-no-props k)
+           :else
+           (comp-keyed-props k props)))))
+
+(deftest comp-keyed []
+  (utils/new-root)
+  (m/patch (utils/root) comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
+  )
+
+
+
+
+(def keys-vec2 [[1]
+               [-1 1]])
+
+(m/defcomp comp-attributes-props [props]
+  (h/p :class "props"
+       :hooks {:didMount (fn [props state]
+                           (prn "didMountInner")
+                           (prn :props props)
+                           (prn :state state))
+               :willUpdate (fn [props state]
+                             (prn "willUpdateInner")
+                             (prn :props props)
+                             (prn :state state)
+                             (prn (m/did-move?)))
+               :didUpdate (fn [props state]
+                            (prn "didUpdateInner")
+                            (prn :props props)
+                            (prn :state state)
+                            (prn (m/did-move?)))
+               :willUnmount (fn [state]
+                              (prn "willUnmountInner")
+                              (prn :state state))}
+       (m/text props)))
+
+(m/hooks comp-attributes-props
+         {:didMount (fn [props state]
+                      (prn "didMount")
+                      (prn :props props)
+                      (prn :state state))
+          :willUpdate (fn [props state]
+                        (prn "willUpdate")
+                        (prn :props props)
+                        (prn :state state)
+                        (prn (m/did-move?)))
+          :didUpdate (fn [props state]
+                       (prn "didUpdate")
+                       (prn :props props)
+                       (prn :state state)
+                       (prn (m/did-move?)))
+          :willUnmount (fn [state]
+                         (prn "willUnmount")
+                         (prn :state state))
+          :getInitialState (fn [props]
+                             (prn "getInitialState")
+                             (prn :props props)
+                             "initialState")
+          :willReceiveProps (fn [props]
+                              (prn "willReceiveProps")
+                              (prn :props props)
+                              "newState")})
 
 (m/defcomp comp-attributes-no-props []
   (h/p :class "no-props"))
@@ -68,13 +138,9 @@
            :else
            (comp-attributes-props k props)))))
 
-(m/hooks comp-attributes-f {:didMount (fn [props state]
-                                        (prn props)
-                                        (prn state))})
-
 (deftest comp-attributes []
   (utils/new-root)
-  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec 0) :props "comp-props3"})
+  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec2 1) :props "comp-props5"})
   )
 
 (comment
