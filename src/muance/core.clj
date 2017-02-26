@@ -36,7 +36,7 @@
               clj-var (resolve var)]
           (cond (::tag (meta clj-var))
                 (compile-element-macro env (::tag (meta clj-var)) nil (rest form))
-                (= #'text clj-var) `(muance.core/text-node ~form)
+                (= #'text clj-var) `(muance.core/text-node ~@(rest form))
                 :else form))
         (string? form) `(muance.core/text-node ~form)
         :else form))
@@ -229,7 +229,7 @@
         (vector? params) (let [props-sym (gensym "props")]
                            [(conj params :as props-sym) props-sym])
         (map? params) (let [props-sym (gensym "props")]
-                        [(conj params :as props-sym) props-sym])
+                        [(conj params [:as props-sym]) props-sym])
         :else nil))
 
 (defmacro defcomp [name docstring-or-params & params-body]
@@ -247,8 +247,8 @@
         key-sym (gensym "key")]
     `(defn ~name
        ~(if params-with-props
-          `([~params-with-props]
-            (~name nil ~params-with-props))
+          `([~props-sym]
+            (~name nil ~props-sym))
           `([]
             (~name nil)))
        (~(if params-with-props [key-sym params-with-props] [key-sym])

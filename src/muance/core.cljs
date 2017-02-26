@@ -176,16 +176,33 @@
     node
     (recur (aget parent index-parent-vnode))))
 
-(defn- ref-node [vnode]
+(defn- ref-node-down [vnode]
   (if-let [node (aget vnode index-node)]
     node
     (when-let [children (aget vnode index-children)]
       (let [l (.-length children)]
         (loop [i 0]
           (when (< i l)
-            (if-let [node (ref-node (aget children i))]
+            (if-let [node (ref-node-down (aget children i))]
               node
               (recur (inc i)))))))))
+
+(defn- ref-node-up [vnode]
+  ;; index-children has already been incremented
+  ;; children cannot be nil
+  (let [children (aget vnode index-children)
+        l (.-length children)
+        index (aget vnode index-children-count)
+        found-node (loop [i index
+                          found-node nil]
+                     (if found-node
+                       found-node
+                       (when (< i l)
+                         (recur (inc i) (ref-node-down (aget children i))))))]
+    (if (nil? found-node)
+      (when (nil? (aget vnode index-node))
+        (recur (aget vnode index-parent-vnode)))
+      found-node)))
 
 (defn- insert-before* [parent-node vnode ref-node]
   (if-let [node (aget vnode index-node)]
@@ -198,9 +215,16 @@
             (recur (inc i))))))))
 
 (defn- insert-before [parent-vnode vnode ref-vnode]
-  (let [parent-node (parent-node parent-vnode)
-        ref-node (when ref-vnode (ref-node ref-vnode))]
-    (insert-before* parent-node vnode ref-node)))
+  (if-let [parent-node (aget parent-vnode index-node)]
+    (if (nil? ref-vnode)
+      (insert-before* parent-node vnode nil)
+      (if-let [ref-node (ref-node-down ref-vnode)]
+        (insert-before* parent-node vnode ref-node)
+        (insert-before* parent-node vnode (ref-node-up parent-vnode))))
+    (let [parent-node (parent-node parent-vnode)]
+      (if-let [ref-node (when ref-vnode (ref-node-down ref-vnode))]
+        (insert-before* parent-node vnode ref-node)
+        (insert-before* parent-node vnode (ref-node-up parent-vnode))))))
 
 (defn- splice-to [nodes index moved-node to-node]
   (let [next-moved-node (aget nodes index)]
@@ -292,7 +316,7 @@
                                  (when prev (aget prev index-key)))
                                (and moved-vnode (not= typeid (aget moved-vnode index-typeid)))
                                (do
-                                 (.error
+                                 (.warn
                                   js/console
                                   (str "Nodes with same key and different typeids. key: " key))
                                  (aset moved-vnode index-key nil)
@@ -302,7 +326,7 @@
                                    (remove-node moved-vnode))
                                  (when prev (aget prev index-key)))
                                :else prev-key)]
-            (insert-before *current-vnode* vnode (aget parent-children (inc vnode-index)))
+            (insert-before *current-vnode* vnode prev)
             (aset parent-children vnode-index vnode)
             (set! *new-node* true)
             (if prev-key
