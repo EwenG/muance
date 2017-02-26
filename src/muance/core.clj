@@ -263,18 +263,15 @@
           (close-comp parent-props# parent-state-ref# hooks#))))))
 
 (defmacro hooks [comp hooks-map]
-  (let [var (cljs-resolve &env comp)
-        clj-var (resolve var)
-        _ (assert (::component (meta clj-var)))
-        _ (assert (map? hooks-map))
-        {{willUpdate :willUpdate willUnmount :willUnmount
-          didMount :didMount didUpdate :didUpdate
-          willReceiveProps :willReceiveProps
-          getInitialState :getInitialState} :hooks :as attrs} hooks-map]
+  (let [_ (assert (map? hooks-map))
+        {willUpdate :willUpdate willUnmount :willUnmount
+         didMount :didMount didUpdate :didUpdate
+         willReceiveProps :willReceiveProps
+         getInitialState :getInitialState :as attrs} hooks-map]
     `(goog.object/set
       ~comp
       hooks-key
-      (cljs.core/array getInitialState willReceiveProps
-                       didMount didUpdate willUnmount willUpdate))))
+      (cljs.core/array ~getInitialState ~willReceiveProps
+                       ~didMount ~didUpdate ~willUnmount ~willUpdate))))
 
 

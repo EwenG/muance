@@ -328,7 +328,7 @@
                                :else prev-key)]
             (insert-before *current-vnode* vnode prev)
             (aset parent-children vnode-index vnode)
-            (set! *new-node* true)
+            (set! *new-node* (inc *new-node*))
             (if prev-key
               (remove-vnode-key prev prev-key)
               (remove-node prev))
@@ -349,9 +349,9 @@
 (defn- close-impl [didMount didUpdate]
   (clean-children *current-vnode*)
   (clean-keymap *current-vnode*)
-  (if *new-node*
+  (if (> *new-node* 0)
     (do
-      (set! *new-node* false)
+      (set! *new-node* (dec *new-node*))
       (when didMount
         (.push *didMounts* didMount)
         (.push *didMounts* *props*)
@@ -389,7 +389,7 @@
   (set! moved-flag #js [])
   (binding [*current-vnode* vnode
             *didMounts* #js []
-            *new-node* false
+            *new-node* 0
             *props* nil
             *state* nil
             *state-ref* nil
@@ -458,7 +458,7 @@
   (attr-impl nil key (when (not (nil? val)) (str val)) set-attribute))
 
 (defn- attr-static [key val]
-  (when (and *new-node* (not (nil? val)))
+  (when (and (> *new-node* 0) (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
       (set-attribute node nil key (str val)))))
 
@@ -508,7 +508,7 @@
   (on-impl key f nil nil nil 0))
 
 (defn- on-static [key f]
-  (when (and *new-node* (fn? f))
+  (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *current-vnode* index-node)
           state-ref *state-ref*]
       (.addEventListener node key (fn [e] (f e state-ref)) false))))
@@ -517,7 +517,7 @@
   (on-impl key f attr1 nil nil 1))
 
 (defn- on-static1 [key f attr1]
-  (when (and *new-node* (fn? f))
+  (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *current-vnode* index-node)
           state-ref *state-ref*]
       (.addEventListener node key (fn [e] (f e state-ref attr1)) false))))
@@ -526,7 +526,7 @@
   (on-impl key f attr1 attr2 nil 2))
 
 (defn- on-static2 [key f attr1 attr2]
-  (when (and *new-node* (fn? f))
+  (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *current-vnode* index-node)
           state-ref *state-ref*]
       (.addEventListener node key (fn [e] (f e state-ref attr1 attr2)) false))))
@@ -535,7 +535,7 @@
   (on-impl key f attr1 attr2 attr3 3))
 
 (defn- on-static3 [key f attr1 attr2 attr3]
-  (when (and *new-node* (fn? f))
+  (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *current-vnode* index-node)
           state-ref *state-ref*]
       (.addEventListener node key (fn [e] (f e state-ref attr1 attr2 attr3)) false))))
@@ -544,7 +544,7 @@
   (attr-impl ns key (when (not (nil? val)) (str val)) set-attribute))
 
 (defn- attr-ns-static [ns key val]
-  (when (and *new-node* (not (nil? val)))
+  (when (and (> *new-node* 0) (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
       (set-attribute node ns key (str val)))))
 
@@ -552,7 +552,7 @@
   (attr-impl nil key val set-property))
 
 (defn- prop-static [key val]
-  (when (and *new-node* (not (nil? val)))
+  (when (and (> *new-node* 0) (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
       (set-property node nil key val))))
 
@@ -563,7 +563,7 @@
   (attr-impl nil key (str val) set-style))
 
 (defn- style-static [key val]
-  (when (and *new-node* (not (nil? val)))
+  (when (and (> *new-node* 0) (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
       (set-style node nil key (str val)))))
 
@@ -571,7 +571,7 @@
   (attr-impl nil key (str val) set-style-custom))
 
 (defn- style-custom-static [key val]
-  (when (and *new-node* (not (nil? val)))
+  (when (and (> *new-node* 0) (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
       (set-style-custom node nil key (str val)))))
 
@@ -588,7 +588,7 @@
   (if-let [node-data (o/get node node-data-key)]
     (binding [*current-vnode* node-data
               *didMounts* #js []
-              *new-node* false
+              *new-node* 0
               *props* nil
               *state* nil
               *state-ref* nil
@@ -604,7 +604,7 @@
       (call-did-mount-hooks *didMounts*))
     (binding [*current-vnode* #js [nil nil node 0 #js []]
               *didMounts* #js []
-              *new-node* false
+              *new-node* 0
               *props* nil
               *state* nil
               *state-ref* nil

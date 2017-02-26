@@ -27,7 +27,25 @@
 
 
 
-(def keys-vec [[1 -2 3 4 -5 6]
+
+(m/defcomp comp-insert-before-inner []
+  #_(h/b "rr"))
+
+(m/defcomp comp-insert-before-f [bool]
+  (h/div
+   (if bool
+     (comp-insert-before-inner)
+     (h/a))
+   (h/p)))
+
+(deftest insert-before []
+  (utils/new-root)
+  (m/patch (utils/root) comp-insert-before-f false))
+
+
+
+(def keys-vec [[]
+               [1 -2 3 4 -5 6]
                [1 3 -2 -5 6 4]
                [3 1 -2 5 0 -6 7 4 8]
                [9 5 0]
@@ -50,9 +68,14 @@
            :else
            (comp-attributes-props k props)))))
 
+(m/hooks comp-attributes-f {:didMount (fn [props state]
+                                        (prn props)
+                                        (prn state))})
+
 (deftest comp-attributes []
   (utils/new-root)
-  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec 6) :props "comp-props3"}))
+  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec 0) :props "comp-props3"})
+  )
 
 (comment
 
