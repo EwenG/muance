@@ -254,13 +254,15 @@
        (~(if params-with-props [key-sym params-with-props] [key-sym])
         (cljs.core/let [parent-props# *props*
                         parent-state-ref# *state-ref*
+                        parent-comp-name# *component-name*
                         hooks# (goog.object/get ~name hooks-key)]
-          (open-comp ~typeid ~(boolean params-with-props)
+          (open-comp ~(str ana/*cljs-ns* "/" name)
+                     ~typeid ~(boolean params-with-props)
                      ~(when params-with-props props-sym)
                      ~name ~key-sym hooks#)
           (cljs.core/when-not *skip*
             ~@body)
-          (close-comp parent-props# parent-state-ref# hooks#))))))
+          (close-comp parent-comp-name# parent-props# parent-state-ref# hooks#))))))
 
 (defmacro hooks [component hooks-map]
   (let [_ (assert (and (symbol? component) (map? hooks-map)))

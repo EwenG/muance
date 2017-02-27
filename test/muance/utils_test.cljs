@@ -13,8 +13,8 @@
 (defn root []
   (.getElementById js/document "root"))
 
-(def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs :unmount
-                 :state-ref :key :key-moved :keymap :keymap-invalid])
+(def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs
+                 :state-ref :unmount :component-name :key :key-moved :keymap :keymap-invalid])
 (def comp-keys (-> vnode-keys (assoc 5 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
 

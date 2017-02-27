@@ -75,27 +75,29 @@
 
 
 (def keys-vec2 [[1]
-               [-1 1]])
+                [-1 1]])
 
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
        ::m/hooks {:didMount (fn [props state]
                               (prn "didMountInner")
                               (prn :props props)
-                              (prn :state state))
+                              (prn :state state)
+                              (prn m/*component-name*))
                   :willUpdate (fn [props state]
                                 (prn "willUpdateInner")
                                 (prn :props props)
                                 (prn :state state)
-                                (prn (m/did-move?)))
+                                (prn (m/moving?)))
                   :didUpdate (fn [props state]
                                (prn "didUpdateInner")
                                (prn :props props)
                                (prn :state state)
-                               (prn (m/did-move?)))
+                               (prn (m/moving?)))
                   :willUnmount (fn [state]
                                  (prn "willUnmountInner")
-                                 (prn :state state))}
+                                 (prn :state state)
+                                 (prn m/*component-name*))}
        (m/text props)))
 
 (m/hooks comp-attributes-props
@@ -107,12 +109,12 @@
                         (prn "willUpdate")
                         (prn :props props)
                         (prn :state state)
-                        (prn (m/did-move?)))
+                        (prn (m/moving?)))
           :didUpdate (fn [props state]
                        (prn "didUpdate")
                        (prn :props props)
                        (prn :state state)
-                       (prn (m/did-move?)))
+                       (prn (m/moving?)))
           :willUnmount (fn [state]
                          (prn "willUnmount")
                          (prn :state state))
