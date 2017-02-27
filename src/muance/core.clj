@@ -23,7 +23,7 @@
   (when (and sym (not (get-in env [:locals sym])))
     (let [sym-ns (safe-symbol (namespace sym))
           ns-name (if sym-ns
-                    (->> (:ns env) (resolve-namespace env sym-ns))
+                    (resolve-namespace env sym-ns (:ns env))
                     (get-in env [:ns :name]))]
       (symbol (str ns-name) (name sym)))))
 
@@ -106,10 +106,10 @@
 (defn handler? [h]
   (and (vector? h) (keyword? (first h))))
 
-(defn validate-attributes [{:keys [hooks styles on] :as attributes}]
-  (when (contains? attributes :hooks) (assert (map? hooks)))
+(defn validate-attributes [{:keys [::hooks styles ::on] :as attributes}]
+  (when (contains? attributes ::hooks) (assert (map? hooks)))
   (when (contains? attributes :styles) (assert (map? styles)))
-  (when (contains? attributes :on) (assert (or (handler? on) (every? handler? on)))))
+  (when (contains? attributes ::on) (assert (or (handler? on) (every? handler? on)))))
 
 (defn body-without-attributes [body attributes]
   (drop (* 2 (count attributes)) body))
@@ -161,11 +161,11 @@
 (defn attribute-calls [env tag attrs]
   (reduce (fn [calls [k v]]
             (cond
-              (= k :key) calls
-              (= k :hooks) calls
+              (= k ::key) calls
+              (= k ::hooks) calls
               (= k :class) (conj calls (class-call env v))
               (= k :styles) (into calls (style-calls env v))
-              (= k :on)  (into calls (on-calls env v))
+              (= k ::on)  (into calls (on-calls env v))
               (and (= tag "input") (= k :value))
               (conj calls (if (static? env v)
                             `(prop-static "value" ~v)
@@ -202,9 +202,9 @@
 (defn compile-element-macro
   [env tag typeid body]
   (let [compile-form (partial compile-form env)
-        {key :key
+        {key ::key
          {willUpdate :willUpdate willUnmount :willUnmount
-          didMount :didMount didUpdate :didUpdate} :hooks :as attrs} (attributes body)
+          didMount :didMount didUpdate :didUpdate} ::hooks :as attrs} (attributes body)
         _ (validate-attributes attrs)
         body (body-without-attributes body attrs)]
     (with-svg-namespace tag
@@ -262,16 +262,25 @@
             ~@body)
           (close-comp parent-props# parent-state-ref# hooks#))))))
 
-(defmacro hooks [comp hooks-map]
-  (let [_ (assert (map? hooks-map))
+(defmacro hooks [component hooks-map]
+  (let [_ (assert (and (symbol? component) (map? hooks-map)))
+        resolved (cljs-resolve &env component)
+        comp-ns (and resolved (symbol (namespace resolved)))
+        comp-sym (and resolved (symbol (name resolved)))
+        _ (assert (and comp-ns comp-sym)
+                  "muance.core/hooks first parameter must be a component")
+        var-map (get-in @cljs.env/*compiler* [::ana/namespaces comp-ns :defs comp-sym])
+        _ (assert (get-in var-map [:meta ::component])
+                  "muance.core/hooks first parameter must be a component")
         {willUpdate :willUpdate willUnmount :willUnmount
          didMount :didMount didUpdate :didUpdate
          willReceiveProps :willReceiveProps
          getInitialState :getInitialState :as attrs} hooks-map]
     `(goog.object/set
-      ~comp
+      ~component
       hooks-key
       (cljs.core/array ~getInitialState ~willReceiveProps
                        ~didMount ~didUpdate ~willUnmount ~willUpdate))))
+
 
 

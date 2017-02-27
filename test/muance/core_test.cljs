@@ -75,7 +75,7 @@
    (doseq [k keys]
      (if (= 0 k)
        (h/p)
-       (h/p :key k)))))
+       (h/p ::m/key k)))))
 
 (deftest keyed []
   (utils/new-root)
@@ -100,8 +100,8 @@
 (defn mismatch-key-typeid-f [x]
   (h/div
    (if x
-     (do (h/div :key 1) (h/p :key 2))
-     (do (h/div :key 2) (h/p :key 1)))))
+     (do (h/div ::m/key 1) (h/p ::m/key 2))
+     (do (h/div ::m/key 2) (h/p ::m/key 1)))))
 
 (deftest mismatch-key-typeid []
   (utils/new-root)
@@ -110,8 +110,8 @@
   (m/patch (utils/root) mismatch-key-typeid-f false))
 
 (defn match-key-typeid-f [x]
-  (let [x1 #(h/div :key 1)
-        x2 #(h/p :key 2)]
+  (let [x1 #(h/div ::m/key 1)
+        x2 #(h/p ::m/key 2)]
     (h/div
      (if x
        (do (x1) (x2))
@@ -219,7 +219,7 @@
 (defn handlers-f [[w handler c]]
   (h/div
    :class c
-   :on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
+   ::m/on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
    :styles {:width w :height "500px"}))
 
 (deftest handlers []

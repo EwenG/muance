@@ -79,23 +79,23 @@
 
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
-       :hooks {:didMount (fn [props state]
-                           (prn "didMountInner")
-                           (prn :props props)
-                           (prn :state state))
-               :willUpdate (fn [props state]
-                             (prn "willUpdateInner")
-                             (prn :props props)
-                             (prn :state state)
-                             (prn (m/did-move?)))
-               :didUpdate (fn [props state]
-                            (prn "didUpdateInner")
-                            (prn :props props)
-                            (prn :state state)
-                            (prn (m/did-move?)))
-               :willUnmount (fn [state]
-                              (prn "willUnmountInner")
-                              (prn :state state))}
+       ::m/hooks {:didMount (fn [props state]
+                              (prn "didMountInner")
+                              (prn :props props)
+                              (prn :state state))
+                  :willUpdate (fn [props state]
+                                (prn "willUpdateInner")
+                                (prn :props props)
+                                (prn :state state)
+                                (prn (m/did-move?)))
+                  :didUpdate (fn [props state]
+                               (prn "didUpdateInner")
+                               (prn :props props)
+                               (prn :state state)
+                               (prn (m/did-move?)))
+                  :willUnmount (fn [state]
+                                 (prn "willUnmountInner")
+                                 (prn :state state))}
        (m/text props)))
 
 (m/hooks comp-attributes-props
@@ -140,7 +140,7 @@
 
 (deftest comp-attributes []
   (utils/new-root)
-  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec2 1) :props "comp-props5"})
+  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props5"})
   )
 
 (comment
