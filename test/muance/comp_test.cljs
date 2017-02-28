@@ -7,11 +7,13 @@
             [muance.utils-test :as utils])
   (:require-macros [muance.h :as h]))
 
+(defonce root (atom nil))
+
 (m/defcomp empty-comp-f [])
 
 (deftest empy-comp []
-  (utils/new-root)
-  (m/patch (utils/root) empty-comp-f))
+  (reset! root (m/init-vtree (utils/new-root)))
+  (m/patch-root @root empty-comp-f))
 
 
 (m/defcomp comp-props-inner-f [props]
@@ -22,8 +24,8 @@
        (comp-props-inner-f (+ 1 props))))
 
 (deftest static-comp []
-  (utils/new-root)
-  (m/patch (utils/root) comp-props-f 47))
+  (reset! root (m/init-vtree (utils/new-root)))
+  (m/patch-root @root comp-props-f 47))
 
 
 
@@ -39,8 +41,8 @@
    (h/p)))
 
 (deftest insert-before []
-  (utils/new-root)
-  (m/patch (utils/root) comp-insert-before-f false))
+  (reset! root (m/init-vtree (utils/new-root)))
+  (m/patch-root @root comp-insert-before-f false))
 
 
 
@@ -67,8 +69,8 @@
            (comp-keyed-props k props)))))
 
 (deftest comp-keyed []
-  (utils/new-root)
-  (m/patch (utils/root) comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
+  (reset! root (m/init-vtree (utils/new-root)))
+  (m/patch-root @root comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
   )
 
 
@@ -141,12 +143,12 @@
            (comp-attributes-props k props)))))
 
 (deftest comp-attributes []
-  (utils/new-root)
-  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
+  (reset! root (m/init-vtree (utils/new-root)))
+  (m/patch-root @root comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
   )
 
 (comment
 
-  (cljs.pprint/pprint (utils/root-vnode))
-
+  (cljs.pprint/pprint (utils/root-vnode @root))
+  
   )

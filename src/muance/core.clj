@@ -264,17 +264,20 @@
             ~@body)
           (close-comp parent-comp-name# parent-props# parent-state-ref# hooks#))))))
 
-(defmacro hooks [component hooks-map]
-  (let [_ (assert (and (symbol? component) (map? hooks-map)))
-        resolved (cljs-resolve &env component)
+(defn assert-component [env component msg]
+  (let [_ (assert (symbol? component) msg)
+        resolved (cljs-resolve env component)
         comp-ns (and resolved (symbol (namespace resolved)))
         comp-sym (and resolved (symbol (name resolved)))
-        _ (assert (and comp-ns comp-sym)
-                  "muance.core/hooks first parameter must be a component")
-        var-map (get-in @cljs.env/*compiler* [::ana/namespaces comp-ns :defs comp-sym])
-        _ (assert (get-in var-map [:meta ::component])
-                  "muance.core/hooks first parameter must be a component")
-        {willUpdate :willUpdate willUnmount :willUnmount
+        _ (assert (and comp-ns comp-sym) msg)
+        var-map (get-in @cljs.env/*compiler* [::ana/namespaces comp-ns :defs comp-sym])]
+    (assert (get-in var-map [:meta ::component]) msg)))
+
+(defmacro hooks [component hooks-map]
+  (assert-component
+   &env component "muance.core/hooks first parameter must be a component")
+  (assert (map? hooks-map))
+  (let [{willUpdate :willUpdate willUnmount :willUnmount
          didMount :didMount didUpdate :didUpdate
          willReceiveProps :willReceiveProps
          getInitialState :getInitialState :as attrs} hooks-map]
@@ -283,6 +286,14 @@
       hooks-key
       (cljs.core/array ~getInitialState ~willReceiveProps
                        ~didMount ~didUpdate ~willUnmount ~willUpdate))))
+
+(defmacro patch
+  ([vtree component]
+   (assert-component &env component "muance.core/patch second parameter must be a component")
+   `(patch-root ~vtree ~component))
+  ([vtree component props]
+   (assert-component &env component "muance.core/patch second parameter must be a component")
+   `(patch-root ~vtree ~component ~props)))
 
 
 

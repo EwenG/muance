@@ -7,15 +7,17 @@
 (defn new-root []
   (when-let [root (.getElementById js/document "root")]
     (dom/removeNode root))
-  (.appendChild js/document.body (doto (js/document.createElement "div")
-                                   (aset "id" "root"))))
+  (let [root (doto (js/document.createElement "div")
+               (aset "id" "root"))]
+    (.appendChild js/document.body root)
+    root))
 
 (defn root []
   (.getElementById js/document "root"))
 
 (def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs
                  :state-ref :unmount :component-name :key :key-moved :keymap :keymap-invalid])
-(def comp-keys (-> vnode-keys (assoc 5 :props) (assoc 6 :state)))
+(def comp-keys (-> vnode-keys (assoc 2 :dirty-flag) (assoc 5 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
 
 (deftype Parent [typeid])
@@ -75,6 +77,5 @@
         (update-in vnode-map [:children] format-children)
         vnode-map))))
 
-(defn root-vnode []
-  (when-let [root (.getElementById js/document "root")]
-    (format-tree (o/get root m/node-data-key))))
+(defn root-vnode [root]
+  (format-tree (aget root 0)))

@@ -22,7 +22,6 @@
 (def ^{:private true} index-comp-props 5)
 (def ^{:private true} index-comp-state 6)
 
-(def ^{:private true} node-data-key "muance.core/node-data")
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
 
 (def ^{:dynamic true :private true} *current-vnode* nil)
@@ -38,6 +37,7 @@
 (def ^{:dynamic true :private true} *state-ref* nil)
 (def ^{:dynamic true :private true} *skip* nil)
 (def ^{:dynamic true :private true} *component-depth* nil)
+(def ^{:dynamic true :private true} *render-queue* nil)
 ;; incremented on svg open, decremented on svg close, reseted to 0 on foreignObject open,
 ;; previous value restored on foreignObject close
 (def ^{:dynamic true :private true} *svg-namespace* nil)
@@ -61,13 +61,22 @@
         (inc (aget *current-vnode* index-keymap-invalid))))
 
 (defn- set-component-dirty [k r o n]
-  (let [vnode (o/get r vnode-stateful-key)]
+  (let [stateful-data (o/get r vnode-stateful-key)
+        vnode (aget stateful-data 0)
+        comp-fn (aget stateful-data 1)
+        render-queue (aget stateful-data 2)
+        component-depth (aget stateful-data 3)]
     (when-not (aget vnode index-comp-dirty-flag)
       (aset vnode index-comp-dirty-flag true)
-      (let [maybe-props (aget vnode index-comp-props)]
-        (if (identical? maybe-props no-props-flag)
-          (prn "comp dirty no props")
-          (prn "comp dirty"))))))
+      (if-let [dirty-comps (aget render-queue component-depth)]
+        (do (.push dirty-comps comp-fn)
+            (.push dirty-comps vnode))
+        (aset render-queue component-depth #js [comp-fn vnode]))
+      (when-not (aget render-queue 0)
+        (aset render-queue 0 true)
+        (.requestAnimationFrame js/window
+         (fn []
+           (process-render-queue render-queue)))))))
 
 (defn- call-unmount-hooks [vnode]
   (when-let [unmount-hook (aget vnode index-unmount)]
@@ -257,7 +266,7 @@
       nil props)))
 
 ;; (= tag nil) means this is the opening of a component
-(defn- open-impl [tag typeid key willUpdate willReceiveProps getInitialState]
+(defn- open-impl [tag typeid key willUpdate willReceiveProps]
   (let [key (when key (str key))
         vnode-index (or (aget *current-vnode* index-children-count) 0)
         parent-children (or (aget *current-vnode* index-children) #js [])
@@ -284,8 +293,10 @@
           (set! *skip* true)
           (do
             (when (nil? tag)
-              (aset prev index-comp-dirty-flag nil)
-              (will-receive-props prev-props *props* willReceiveProps))
+              ;; avoid receiveProps to trigger the watcher
+              (aset prev index-comp-dirty-flag true)
+              (will-receive-props prev-props *props* willReceiveProps)
+              (aset prev index-comp-dirty-flag nil))
             (when willUpdate (willUpdate *props* *state*)))))
       (let [moved-vnode (and key keymap (o/get keymap key))]
         (if (and moved-vnode
@@ -315,8 +326,9 @@
             (when (nil? tag)
               (set! *state-ref* (aget moved-vnode index-state-ref))
               (set! *state* @*state-ref*)
-              (aset moved-vnode index-comp-dirty-flag nil)
-              (will-receive-props prev-props *props* willReceiveProps))
+              (aset moved-vnode index-comp-dirty-flag true)
+              (will-receive-props prev-props *props* willReceiveProps)
+              (aset prev index-comp-dirty-flag nil))
             (when willUpdate (willUpdate *props* *state*)))
           ;; this is a new node -> replace the node at the current index
           (let [vnode (if key
@@ -354,17 +366,12 @@
               (remove-node prev))
             (when (= tag "foreignObject")
               (set! *svg-namespace* 0))
-            (set! *current-vnode* vnode)
-            (when (nil? tag)
-              (set! *state-ref* (atom (getInitialState *props*)))
-              (o/set *state-ref* vnode-stateful-key vnode)
-              (add-watch *state-ref* ::component set-component-dirty)
-              (set! *state* @*state-ref*))))))))
+            (set! *current-vnode* vnode)))))))
 
 (defn- open [tag typeid key willUpdate willUnmount]
   (assert (not (nil? *current-vnode*))
           (str "tag " tag " was called outside the render loop context"))
-  (open-impl tag (or typeid tag) key willUpdate nil nil)
+  (open-impl tag (or typeid tag) key willUpdate nil)
   (when (not= (aget *current-vnode* index-unmount) willUnmount)
     (aset *current-vnode* index-unmount willUnmount)
     (aset *current-vnode* index-state-ref *state-ref*)
@@ -403,6 +410,7 @@
       (aset *current-vnode* index-children parent-children))
     (if (= -1 prev-typeid)
       (when (not= (aget prev index-text) t)
+        (aset prev index-text t)
         (o/set (aget prev index-node) "nodeValue" t))
       (let [vnode (new-text-vnode (.createTextNode js/document t) t)]
         (insert-before *current-vnode* vnode (aget parent-children vnode-index))
@@ -410,25 +418,6 @@
         (if prev-key
           (remove-vnode-key prev prev-key)
           (remove-node prev))))))
-
-(defn- patch-local [vnode patch-fn props? props]
-  (set! moved-flag #js [])
-  (binding [*current-vnode* vnode
-            *didMounts* #js []
-            *new-node* 0
-            *moving* false
-            *props* nil
-            *state* nil
-            *state-ref* nil
-            *moved-vnode* nil
-            *skip* false
-            *svg-namespace* 0
-            *component-depth* 0
-            *component-name* nil]
-    (let [key (aget vnode index-key)]
-      (if props?
-        (patch-fn key props)
-        (patch-fn key)))))
 
 (def ^{:private true} hooks-key "muance.core/hooks")
 
@@ -439,26 +428,32 @@
 (def ^{:private true} index-hooks-willUnmount 4)
 (def ^{:private true} index-hooks-willUpdate 5)
 
-(defn- default-get-initial-state [props] nil)
-
 (defn- open-comp [component-name typeid props? props comp-fn key hooks]
   (assert (not (nil? *current-vnode*))
           (str "tried to render " component-name " outside the render loop context"))
   (set! *component-name* component-name)
   (set! *props* props)
+  (set! *component-depth* (inc *component-depth*))
   (if hooks
-    (let [willUnmount (aget hooks index-hooks-willUnmount)]
+    (let [willUnmount (aget hooks index-hooks-willUnmount)
+          getInitialState (aget hooks index-hooks-getInitialState)]
       (open-impl nil typeid key
                  (aget hooks index-hooks-willUpdate)
-                 (aget hooks index-hooks-willReceiveProps)
-                 (or (aget hooks index-hooks-getInitialState) default-get-initial-state))
+                 (aget hooks index-hooks-willReceiveProps))
       (when (not= (aget *current-vnode* index-unmount) willUnmount)
         (aset *current-vnode* index-unmount willUnmount)
-        (aset *current-vnode* index-component-name component-name)))
+        (aset *current-vnode* index-component-name component-name))
+      (set! *state-ref* (atom (when getInitialState (getInitialState *props*)))))
     (do
-      (open-impl nil typeid key nil nil default-get-initial-state)
+      (open-impl nil typeid key nil nil)
       (when (not= (aget *current-vnode* index-unmount) nil)
         (aset *current-vnode* index-unmount nil))))
+  (when (> *new-node* 0)
+    (set! *state-ref* (atom nil))
+    (o/set *state-ref* vnode-stateful-key
+           #js [*current-vnode* comp-fn *render-queue* *component-depth*])
+    (add-watch *state-ref* ::component set-component-dirty)
+    (set! *state* @*state-ref*))
   (aset *current-vnode* index-state-ref *state-ref*)
   (aset *current-vnode* index-comp-props (if props? *props* no-props-flag))
   (aset *current-vnode* index-comp-state *state*))
@@ -468,6 +463,7 @@
     (if hooks
       (close-impl (aget hooks index-hooks-didMount) (aget hooks index-hooks-didUpdate))
       (close-impl nil nil)))
+  (set! *component-depth* (dec *component-depth*))
   (set! *current-vnode* (aget *current-vnode* index-parent-vnode))
   (set! *props* parent-props)
   (set! *state-ref* parent-state-ref)
@@ -616,11 +612,10 @@
        (aget did-mount-hooks (- l 2)) (aget did-mount-hooks (- l 1)))
       (recur (- l 4)))))
 
-(defn- patch-impl [node patch-fn props? props]
-  (assert (and (goog/isObject node) (= 1 (.-nodeType node))) "can only patch dom nodes")
+(defn- patch-impl [render-queue vnode patch-fn maybe-props]
   (set! moved-flag #js [])
-  (if-let [node-data (o/get node node-data-key)]
-    (binding [*current-vnode* node-data
+  (let [parent-vnode (aget vnode index-parent-vnode)]
+    (binding [*current-vnode* parent-vnode
               *didMounts* #js []
               *new-node* 0
               *moving* false
@@ -631,38 +626,60 @@
               *skip* false
               *svg-namespace* 0
               *component-depth* 0
-              *component-name* nil]
-      (if props?
-        (patch-fn props)
-        (patch-fn))
-      (clean-children *current-vnode*)
-      (clean-keymap *current-vnode*)
-      (call-did-mount-hooks *didMounts*))
-    (binding [*current-vnode* #js [nil nil node 0 #js []]
-              *didMounts* #js []
-              *new-node* 0
-              *moving* false
-              *props* nil
-              *state* nil
-              *state-ref* nil
-              *moved-vnode* nil
-              *skip* false
-              *svg-namespace* 0
-              *component-depth* 0
-              *component-name* nil]
-      (o/set node node-data-key *current-vnode*)
-      (loop [child (.-firstChild node)]
-        (when child
-          (.removeChild node child)
-          (recur (.-firstChild node))))
-      (if props?
-        (patch-fn props)
-        (patch-fn))
-      (clean-children *current-vnode*)
-      (clean-keymap *current-vnode*)
+              *component-name* nil
+              *render-queue* render-queue]
+      (if (identical? maybe-props no-props-flag)
+        (patch-fn (aget vnode index-key))
+        (patch-fn (aget vnode index-key) maybe-props))
+      (aset parent-vnode index-children-count 0)
       (call-did-mount-hooks *didMounts*))))
 
-(defn patch
-  ([node patch-fn] (patch-impl node patch-fn false nil))
-  ([node patch-fn props] (patch-impl node patch-fn true props)))
+(defn- process-render-queue [render-queue]
+  (let [l (.-length render-queue)]
+    (loop [i 1]
+      (when (< i l)
+        (let [dirty-comps (aget render-queue i)
+              l (if dirty-comps (.-length dirty-comps) 0)]
+          (loop [j (dec l)]
+            (when (> j -1)
+              (let [vnode (.pop dirty-comps)]
+                (when (aget vnode index-comp-dirty-flag)
+                  (patch-impl render-queue vnode (.pop dirty-comps)
+                              (aget vnode index-comp-props))))
+              (recur (- j 2)))))
+        (recur (inc i)))))
+  (aset render-queue 0 nil))
+
+(defn- patch-root-impl [root patch-fn props]
+  ;; On first render (children is nil), create a fake root component.
+  ;; This is necessary to make patch-impl generic
+  ;; Also, render synchronously on first render
+  (if-let [children (aget root 0 index-children)]
+    (let [render-queue (aget root 1)]
+      (aset render-queue 0 true)
+      (.requestAnimationFrame js/window
+       (fn []
+         (patch-impl (aget root 1) (aget children 0) patch-fn props)
+         (process-render-queue render-queue))))
+    (patch-impl (aget root 1)
+                ;; props must be set to something otherwise the component would not render
+                ;; when rendered with props=nil
+                #js [nil (aget root 0) nil nil nil no-props-flag]
+                patch-fn props)))
+
+(defn- patch-root
+  ([root patch-fn]
+   (patch-root-impl root patch-fn no-props-flag))
+  ([root patch-fn props]
+   (patch-root-impl root patch-fn props)))
+
+(defn init-vtree [node]
+  (assert (and (goog/isObject node) (= 1 (.-nodeType node))) "can only patch dom nodes")
+  (loop [child (.-firstChild node)]
+    (when child
+      (.removeChild node child)
+      (recur (.-firstChild node))))
+  ;; root node + render queue
+  #js [#js [nil nil node 0 nil] #js []])
+
 
