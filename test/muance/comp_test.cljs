@@ -88,12 +88,12 @@
                                 (prn "willUpdateInner")
                                 (prn :props props)
                                 (prn :state state)
-                                (prn (m/moving?)))
+                                (prn m/*moving*))
                   :didUpdate (fn [props state]
                                (prn "didUpdateInner")
                                (prn :props props)
                                (prn :state state)
-                               (prn (m/moving?)))
+                               (prn m/*moving*))
                   :willUnmount (fn [state]
                                  (prn "willUnmountInner")
                                  (prn :state state)
@@ -109,12 +109,12 @@
                         (prn "willUpdate")
                         (prn :props props)
                         (prn :state state)
-                        (prn (m/moving?)))
+                        (prn m/*moving*))
           :didUpdate (fn [props state]
                        (prn "didUpdate")
                        (prn :props props)
                        (prn :state state)
-                       (prn (m/moving?)))
+                       (prn m/*moving*))
           :willUnmount (fn [state]
                          (prn "willUnmount")
                          (prn :state state))
@@ -142,7 +142,7 @@
 
 (deftest comp-attributes []
   (utils/new-root)
-  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props5"})
+  (m/patch (utils/root) comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
   )
 
 (comment

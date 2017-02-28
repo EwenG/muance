@@ -37,7 +37,7 @@
 (def ^{:dynamic true :private true} *props* nil)
 (def ^{:dynamic true :private true} *state-ref* nil)
 (def ^{:dynamic true :private true} *skip* nil)
-(def ^{:dynamic true :private true} *no-comp-update* nil)
+(def ^{:dynamic true :private true} *component-depth* nil)
 ;; incremented on svg open, decremented on svg close, reseted to 0 on foreignObject open,
 ;; previous value restored on foreignObject close
 (def ^{:dynamic true :private true} *svg-namespace* nil)
@@ -51,6 +51,9 @@
 
 (def ^:dynamic *state* nil)
 (def ^:dynamic *component-name* nil)
+;; *moving* = (boolean *moved-vnode*), *moving* purpose is to avoid exposing vnodes to the user,
+;; since printing a vnode will cause a stackoverflow (recursive reference)
+(def ^:dynamic *moving* nil)
 
 (defn- remove-vnode-key [vnode key]
   (aset vnode index-parent-vnode nil)
@@ -290,7 +293,8 @@
                  (not (identical? moved-flag (aget moved-vnode index-key-moved))))
           (let [prev-props (when (nil? tag) (comp-props moved-vnode))]
             (when (nil? *moved-vnode*)
-              (set! *moved-vnode* moved-vnode))
+              (set! *moved-vnode* moved-vnode)
+              (set! *moving* true))
             (aset moved-vnode index-key-moved moved-flag)
             (insert-before *current-vnode* moved-vnode prev)
             (aset parent-children vnode-index moved-vnode)
@@ -311,7 +315,7 @@
             (when (nil? tag)
               (set! *state-ref* (aget moved-vnode index-state-ref))
               (set! *state* @*state-ref*)
-              (aset prev index-comp-dirty-flag nil)
+              (aset moved-vnode index-comp-dirty-flag nil)
               (will-receive-props prev-props *props* willReceiveProps))
             (when willUpdate (willUpdate *props* *state*)))
           ;; this is a new node -> replace the node at the current index
@@ -379,7 +383,8 @@
         (.push *didMounts* *component-name*)))
     (when didUpdate (didUpdate *props* *state*)))
   (when (identical? *moved-vnode* *current-vnode*)
-    (set! *moved-vnode* nil)))
+    (set! *moved-vnode* nil)
+    (set! *moving* false)))
 
 (defn- close [didMount didUpdate]
   (when (aget *current-vnode* index-attrs-count)
@@ -411,13 +416,14 @@
   (binding [*current-vnode* vnode
             *didMounts* #js []
             *new-node* 0
+            *moving* false
             *props* nil
             *state* nil
             *state-ref* nil
             *moved-vnode* nil
             *skip* false
             *svg-namespace* 0
-            *no-comp-update* false
+            *component-depth* 0
             *component-name* nil]
     (let [key (aget vnode index-key)]
       (if props?
@@ -617,13 +623,14 @@
     (binding [*current-vnode* node-data
               *didMounts* #js []
               *new-node* 0
+              *moving* false
               *props* nil
               *state* nil
               *state-ref* nil
               *moved-vnode* nil
               *skip* false
               *svg-namespace* 0
-              *no-comp-update* false
+              *component-depth* 0
               *component-name* nil]
       (if props?
         (patch-fn props)
@@ -634,13 +641,14 @@
     (binding [*current-vnode* #js [nil nil node 0 #js []]
               *didMounts* #js []
               *new-node* 0
+              *moving* false
               *props* nil
               *state* nil
               *state-ref* nil
               *moved-vnode* nil
               *skip* false
               *svg-namespace* 0
-              *no-comp-update* false
+              *component-depth* 0
               *component-name* nil]
       (o/set node node-data-key *current-vnode*)
       (loop [child (.-firstChild node)]
@@ -657,7 +665,4 @@
 (defn patch
   ([node patch-fn] (patch-impl node patch-fn false nil))
   ([node patch-fn props] (patch-impl node patch-fn true props)))
-
-(defn moving? []
-  (boolean *moved-vnode*))
 
