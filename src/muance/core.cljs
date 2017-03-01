@@ -18,7 +18,11 @@
 
 (def ^{:private true} index-text 3)
 
-(def ^{:private true} index-comp-dirty-flag 2)
+;; The index of a component in the vnode parent children array, plus 1.
+;; The plus 1 is to avoid to have a zero value, because this var is also
+;; used as a dirty flag: when the component local state changes, this var is
+;; set to its opposite 
+(def ^{:private true} index-comp-index-in-parent 2)
 (def ^{:private true} index-comp-props 5)
 (def ^{:private true} index-comp-state 6)
 
@@ -60,28 +64,41 @@
 (defn- component? [vnode]
   (< (aget vnode index-typeid) 0))
 
+(defn- dirty-component? [vnode]
+  (< (aget vnode index-comp-index-in-parent) 0))
+
+(defn- set-component-dirty [vnode dirty]
+  (let [dirty-flag (aget vnode index-comp-index-in-parent)]
+    (if dirty
+      (when (> dirty-flag 0)
+        (aset vnode index-comp-index-in-parent (- dirty-flag)))
+      (when (< dirty-flag 0)
+        (aset vnode index-comp-index-in-parent (- dirty-flag))))))
+
 (defn- remove-vnode-key [vnode key]
   (aset vnode index-parent-vnode nil)
   (aset *current-vnode* index-keymap-invalid
         (inc (aget *current-vnode* index-keymap-invalid))))
 
-(defn- set-component-dirty [k r o n]
-  (let [stateful-data (o/get r vnode-stateful-key)
-        vnode (aget stateful-data 0)
-        comp-fn (aget stateful-data 1)
-        render-queue (aget stateful-data 2)
-        component-depth (aget stateful-data 3)]
-    (when-not (aget vnode index-comp-dirty-flag)
-      (aset vnode index-comp-dirty-flag true)
-      (if-let [dirty-comps (aget render-queue component-depth)]
-        (do (.push dirty-comps comp-fn)
-            (.push dirty-comps vnode))
-        (aset render-queue component-depth #js [comp-fn vnode]))
-      (when-not (aget render-queue 0)
-        (aset render-queue 0 true)
-        (.requestAnimationFrame js/window
-         (fn []
-           (process-render-queue render-queue)))))))
+(defn- on-state-change [k r o n]
+  ;; we don't want to mark the component as dirty when in a render loop (willReceiveProps)
+  (when (nil? *current-vnode*)
+    (let [stateful-data (o/get r vnode-stateful-key)
+          vnode (aget stateful-data 0)
+          comp-fn (aget stateful-data 1)
+          render-queue (aget stateful-data 2)
+          component-depth (aget stateful-data 3)]
+      (when (not (dirty-component? vnode))
+        (set-component-dirty vnode true)
+        (if-let [dirty-comps (aget render-queue component-depth)]
+          (do (.push dirty-comps comp-fn)
+              (.push dirty-comps vnode))
+          (aset render-queue component-depth #js [comp-fn vnode]))
+        (when-not (aget render-queue 0)
+          (aset render-queue 0 true)
+          (.requestAnimationFrame js/window
+                                  (fn []
+                                    (process-render-queue render-queue))))))))
 
 (defn- call-unmount-hooks [vnode]
   (when-let [unmount-hook (aget vnode index-unmount)]
@@ -110,23 +127,23 @@
         (recur (aget vnode index-parent-vnode))))))
 
 (defn- remove-real-node [vnode]
-  (if-let [node (aget vnode index-node)]
-    (when-let [p (.-parentNode node)]
-      (.removeChild p node))
+  (if (component? vnode)
     (when-let [children (aget vnode index-children)]
       (let [l (.-length children)]
         (loop [i 0]
           (when (< i l)
             (remove-real-node (aget children i))
-            (recur (inc i))))))))
+            (recur (inc i))))))
+    (let [node (aget vnode index-node)]
+      (when-let [p (.-parentNode node)]
+        (.removeChild p node)))))
 
 (defn- remove-node [vnode]
   (when vnode
     (let [component-name *component-name*]
       (recursively-call-unmount-hooks vnode)
       (set! *component-name* component-name))
-    (when-not (component? vnode)
-      (remove-real-node vnode))))
+    (remove-real-node vnode)))
 
 (defn- clean-keymap [vnode]
   (when-let [keymap (aget vnode index-keymap)]
@@ -299,9 +316,6 @@
           (set! *skip* true)
           (do
             (when (nil? tag)
-              ;; avoid receiveProps to trigger the watcher
-              ;; index-comp-dirty-flag is reset in open-comp
-              (aset prev index-comp-dirty-flag true)
               (will-receive-props prev-props *props* willReceiveProps))
             (when willUpdate (willUpdate *props* *state*)))))
       (let [moved-vnode (and key keymap (o/get keymap key))]
@@ -332,7 +346,6 @@
             (when (nil? tag)
               (set! *state-ref* (aget moved-vnode index-state-ref))
               (set! *state* @*state-ref*)
-              (aset moved-vnode index-comp-dirty-flag true)
               (will-receive-props prev-props *props* willReceiveProps))
             (when willUpdate (willUpdate *props* *state*)))
           ;; this is a new node -> replace the node at the current index
@@ -371,7 +384,9 @@
               (remove-node prev))
             (when (= tag "foreignObject")
               (set! *svg-namespace* 0))
-            (set! *current-vnode* vnode)))))))
+            (set! *current-vnode* vnode)))))
+    (when (nil? tag)
+      (aset *current-vnode* index-comp-index-in-parent (inc vnode-index)))))
 
 (defn- open [tag typeid key willUpdate willUnmount]
   (assert (not (nil? *current-vnode*))
@@ -457,9 +472,8 @@
       (set! *state-ref* (atom nil)))
     (o/set *state-ref* vnode-stateful-key
            #js [*current-vnode* comp-fn *render-queue* *component-depth*])
-    (add-watch *state-ref* ::component set-component-dirty)
+    (add-watch *state-ref* ::component on-state-change)
     (set! *state* @*state-ref*))
-  (aset *current-vnode* index-comp-dirty-flag nil)
   (aset *current-vnode* index-state-ref *state-ref*)
   (aset *current-vnode* index-comp-props (if props? *props* no-props-flag))
   (aset *current-vnode* index-comp-state *state*))
@@ -622,8 +636,7 @@
 (defn- patch-impl [render-queue parent-vnode vnode patch-fn maybe-props]
   (set! moved-flag #js [])
   (when vnode
-    (aset parent-vnode index-children-count
-          (.indexOf (aget parent-vnode index-children) vnode)))
+    (aset parent-vnode index-children-count (dec (- (aget vnode index-comp-index-in-parent)))))
   (binding [*current-vnode* parent-vnode
             *didMounts* #js []
             *new-node* 0
@@ -651,11 +664,12 @@
               l (if dirty-comps (.-length dirty-comps) 0)]
           (loop [j (dec l)]
             (when (> j -1)
-              (let [vnode (.pop dirty-comps)]
-                (when (aget vnode index-comp-dirty-flag)
+              (let [vnode (.pop dirty-comps)
+                    comp-fn (.pop dirty-comps)]
+                (when (dirty-component? vnode)
                   (patch-impl render-queue
                               (aget vnode index-parent-vnode) vnode
-                              (.pop dirty-comps) (aget vnode index-comp-props))))
+                              comp-fn (aget vnode index-comp-props))))
               (recur (- j 2)))))
         (recur (inc i)))))
   (aset render-queue 0 nil))
@@ -687,4 +701,3 @@
       (recur (.-firstChild node))))
   ;; root node + render queue
   #js [#js [nil nil node 0 nil] #js []])
-

@@ -70,7 +70,7 @@
 
 (deftest comp-keyed []
   (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
+  (m/patch-root @root comp-keyed-f {:keys (get keys-vec 4) :props "comp-props3"})
   )
 
 
