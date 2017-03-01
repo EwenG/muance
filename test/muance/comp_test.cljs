@@ -25,7 +25,7 @@
 
 (deftest static-comp []
   (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root comp-props-f 47))
+  (m/patch-root @root comp-props-f 46))
 
 
 
@@ -149,15 +149,19 @@
 
 
 
-
-(m/defcomp render-queue-depth2 [props]
-  )
-
 (defn render-queue-click [e state-ref]
   (swap! state-ref inc))
 
+(m/defcomp render-queue-depth2 [props]
+  (h/div :state m/*state*
+         :ff "r"
+         :styles {:width "300px" :height "300px" :border "1px solid green"}
+         ::m/on [:click render-queue-click]
+         (m/text props)))
+
 (m/defcomp render-queue-depth1 [props]
   (h/p :class m/*state*
+       :props props
        :styles {:width "500px" :height "500px" :border "1px solid black"}
        ::m/on [:click render-queue-click]
        (render-queue-depth2 (:depth2 props))))
@@ -174,12 +178,12 @@
 (m/hooks render-queue-depth1
          {:getInitialState (fn [props]
                              0)
-          :willReceiveProps (fn [prev-props props]
+          :willReceiveProps (fn [prev-props props state]
                               (:depth1 props))})
 
 (deftest render-queue []
   (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root render-queue-depth0 {:depth1 45 :depth2 "depth2-props"}))
+  (m/patch-root @root render-queue-depth0 {:depth1 44 :depth2 "depth2-props"}))
 
 (comment
 

@@ -279,7 +279,7 @@
 (defn- will-receive-props [prev-props props willReceiveProps]
   (when (and willReceiveProps (not (identical? prev-props props)))
     (let [new-state (willReceiveProps prev-props props *state*)]
-      (when (not (identical? new-state *state*))
+      (when-not (identical? new-state *state*)
         (reset! *state-ref* new-state)
         (set! *state* new-state)))))
 
@@ -636,7 +636,9 @@
 (defn- patch-impl [render-queue parent-vnode vnode patch-fn maybe-props]
   (set! moved-flag #js [])
   (when vnode
-    (aset parent-vnode index-children-count (dec (- (aget vnode index-comp-index-in-parent)))))
+    (let [child-index (aget vnode index-comp-index-in-parent)]
+      (aset parent-vnode index-children-count
+            (if (< child-index 0) (dec (- child-index)) (dec child-index)))))
   (binding [*current-vnode* parent-vnode
             *didMounts* #js []
             *new-node* 0
