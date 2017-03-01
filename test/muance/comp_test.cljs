@@ -147,8 +147,45 @@
   (m/patch-root @root comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
   )
 
+
+
+
+(m/defcomp render-queue-depth2 [props]
+  )
+
+(defn render-queue-click [e state-ref]
+  (swap! state-ref inc))
+
+(m/defcomp render-queue-depth1 [props]
+  (h/p :class m/*state*
+       :styles {:width "500px" :height "500px" :border "1px solid black"}
+       ::m/on [:click render-queue-click]
+       (render-queue-depth2 (:depth2 props))))
+
+(m/defcomp render-queue-depth1* []
+  (h/p :class m/*state*
+       :styles {:width "500px" :height "500px" :border "1px solid red"}
+       ::m/on [:click render-queue-click]))
+
+(m/defcomp render-queue-depth0 [props]
+  (h/div (render-queue-depth1 props)
+         (render-queue-depth1*)))
+
+(m/hooks render-queue-depth1
+         {:getInitialState (fn [props]
+                             0)
+          :willReceiveProps (fn [prev-props props]
+                              (:depth1 props))})
+
+(deftest render-queue []
+  (reset! root (m/init-vtree (utils/new-root)))
+  (m/patch-root @root render-queue-depth0 {:depth1 45 :depth2 "depth2-props"}))
+
 (comment
 
+  (m/patch-root @root cc)
+
   (cljs.pprint/pprint (utils/root-vnode @root))
+  (cljs.pprint/pprint (utils/render-queue @root))
   
   )

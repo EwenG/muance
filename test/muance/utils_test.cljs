@@ -36,7 +36,7 @@
 
 (defn format-vnode [vnode]
   (when vnode
-    (let [vnode-keys (cond (= -1 (aget vnode m/index-typeid))
+    (let [vnode-keys (cond (= 0 (aget vnode m/index-typeid))
                            vnode-keys-text
                            (nil? (aget vnode m/index-node))
                            comp-keys
@@ -71,7 +71,7 @@
 (defn format-tree [vnode]
   (let [vnode-map (format-vnode vnode)
         vnode-map (with-namespace vnode-map vnode)]
-    (if (= -1 (aget vnode-map m/index-typeid))
+    (if (= 0 (aget vnode-map m/index-typeid))
       vnode-map
       (if (contains? vnode-map :children)
         (update-in vnode-map [:children] format-children)
@@ -79,3 +79,26 @@
 
 (defn root-vnode [root]
   (format-tree (aget root 0)))
+
+(defn format-depth [dirty-comps]
+  (when dirty-comps
+    (let [l (.-length dirty-comps)]
+      (loop [arr (transient [])
+             i 0]    
+        (if (< i l)
+          (recur
+           (-> arr
+               (conj! (aget dirty-comps i))
+               (conj! (format-tree (aget dirty-comps (inc i)))))
+           (+ i 2))
+          (persistent! arr))))))
+
+(defn render-queue [root]
+  (when-let [render-queue (aget root 1)]
+    (let [l (.-length render-queue)]
+      (loop [arr (transient [])
+             i 0]
+        (cond (= i 0)
+              (recur (conj! arr (aget render-queue 0)) (inc i))
+              (< i l) (recur (conj! arr (format-depth (aget render-queue i))) (inc i))
+              :else (persistent! arr))))))

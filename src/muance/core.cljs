@@ -55,6 +55,11 @@
 ;; since printing a vnode will cause a stackoverflow (recursive reference)
 (def ^:dynamic *moving* nil)
 
+(declare process-render-queue)
+
+(defn- component? [vnode]
+  (< (aget vnode index-typeid) 0))
+
 (defn- remove-vnode-key [vnode key]
   (aset vnode index-parent-vnode nil)
   (aset *current-vnode* index-keymap-invalid
@@ -83,8 +88,7 @@
     ;; *component-name* is restored in remove-node
     (set! *component-name* (aget vnode index-component-name))
     (unmount-hook @(aget vnode index-state-ref))
-    ;; this is a component
-    (when (nil? (aget vnode index-node))
+    (when (component? vnode)
       (remove-watch (aget vnode index-state-ref) ::component))))
 
 (defn- bottom-first-child [vnode]
@@ -121,7 +125,8 @@
     (let [component-name *component-name*]
       (recursively-call-unmount-hooks vnode)
       (set! *component-name* component-name))
-    (remove-real-node vnode)))
+    (when-not (component? vnode)
+      (remove-real-node vnode))))
 
 (defn- clean-keymap [vnode]
   (when-let [keymap (aget vnode index-keymap)]
@@ -183,7 +188,7 @@
     vnode))
 
 (defn- new-text-vnode [element text]
-  #js [-1 *current-vnode* element text])
+  #js [0 *current-vnode* element text])
 
 (defn- create-element [tag]
   ;; tag is nil when opening a component
@@ -193,20 +198,20 @@
       (.createElement js/document tag))))
 
 (defn- parent-node [parent]
-  (if-let [node (aget parent index-node)]
-    node
-    (recur (aget parent index-parent-vnode))))
+  (if (component? parent)
+    (recur (aget parent index-parent-vnode))
+    (aget parent index-node)))
 
 (defn- ref-node-down [vnode]
-  (if-let [node (aget vnode index-node)]
-    node
+  (if (component? vnode)
     (when-let [children (aget vnode index-children)]
       (let [l (.-length children)]
         (loop [i 0]
           (when (< i l)
             (if-let [node (ref-node-down (aget children i))]
               node
-              (recur (inc i)))))))))
+              (recur (inc i)))))))
+    (aget vnode index-node)))
 
 (defn- ref-node-up [vnode]
   ;; index-children has already been incremented
@@ -221,31 +226,32 @@
                        (when (< i l)
                          (recur (inc i) (ref-node-down (aget children i))))))]
     (if (nil? found-node)
-      (when (nil? (aget vnode index-node))
+      (when (component? vnode)
         (recur (aget vnode index-parent-vnode)))
       found-node)))
 
 (defn- insert-before* [parent-node vnode ref-node]
-  (if-let [node (aget vnode index-node)]
-    (.insertBefore parent-node node ref-node)
+  (if (component? vnode)
     (when-let [children (aget vnode index-children)]
       (let [l (.-length children)]
         (loop [i 0]
           (when (< i l)
             (insert-before* parent-node (aget children i) ref-node)
-            (recur (inc i))))))))
+            (recur (inc i))))))
+    (.insertBefore parent-node (aget vnode index-node) ref-node)))
 
 (defn- insert-before [parent-vnode vnode ref-vnode]
-  (if-let [parent-node (aget parent-vnode index-node)]
-    (if (nil? ref-vnode)
-      (insert-before* parent-node vnode nil)
-      (if-let [ref-node (ref-node-down ref-vnode)]
-        (insert-before* parent-node vnode ref-node)
-        (insert-before* parent-node vnode (ref-node-up parent-vnode))))
+  (if (component? parent-vnode)
     (let [parent-node (parent-node parent-vnode)]
       (if-let [ref-node (when ref-vnode (ref-node-down ref-vnode))]
         (insert-before* parent-node vnode ref-node)
-        (insert-before* parent-node vnode (ref-node-up parent-vnode))))))
+        (insert-before* parent-node vnode (ref-node-up parent-vnode))))
+    (let [parent-node (aget parent-vnode index-node)]
+      (if (nil? ref-vnode)
+        (insert-before* parent-node vnode nil)
+        (if-let [ref-node (ref-node-down ref-vnode)]
+          (insert-before* parent-node vnode ref-node)
+          (insert-before* parent-node vnode (ref-node-up parent-vnode)))))))
 
 (defn- splice-to [nodes index moved-node to-node]
   (let [next-moved-node (aget nodes index)]
@@ -294,9 +300,9 @@
           (do
             (when (nil? tag)
               ;; avoid receiveProps to trigger the watcher
+              ;; index-comp-dirty-flag is reset in open-comp
               (aset prev index-comp-dirty-flag true)
-              (will-receive-props prev-props *props* willReceiveProps)
-              (aset prev index-comp-dirty-flag nil))
+              (will-receive-props prev-props *props* willReceiveProps))
             (when willUpdate (willUpdate *props* *state*)))))
       (let [moved-vnode (and key keymap (o/get keymap key))]
         (if (and moved-vnode
@@ -327,8 +333,7 @@
               (set! *state-ref* (aget moved-vnode index-state-ref))
               (set! *state* @*state-ref*)
               (aset moved-vnode index-comp-dirty-flag true)
-              (will-receive-props prev-props *props* willReceiveProps)
-              (aset prev index-comp-dirty-flag nil))
+              (will-receive-props prev-props *props* willReceiveProps))
             (when willUpdate (willUpdate *props* *state*)))
           ;; this is a new node -> replace the node at the current index
           (let [vnode (if key
@@ -408,7 +413,7 @@
     (aset *current-vnode* index-children-count (inc vnode-index))
     (when (nil? (aget *current-vnode* index-children))
       (aset *current-vnode* index-children parent-children))
-    (if (= -1 prev-typeid)
+    (if (= 0 prev-typeid)
       (when (not= (aget prev index-text) t)
         (aset prev index-text t)
         (o/set (aget prev index-node) "nodeValue" t))
@@ -435,25 +440,26 @@
   (set! *props* props)
   (set! *component-depth* (inc *component-depth*))
   (if hooks
-    (let [willUnmount (aget hooks index-hooks-willUnmount)
-          getInitialState (aget hooks index-hooks-getInitialState)]
+    (let [willUnmount (aget hooks index-hooks-willUnmount)]
       (open-impl nil typeid key
                  (aget hooks index-hooks-willUpdate)
                  (aget hooks index-hooks-willReceiveProps))
       (when (not= (aget *current-vnode* index-unmount) willUnmount)
         (aset *current-vnode* index-unmount willUnmount)
-        (aset *current-vnode* index-component-name component-name))
-      (set! *state-ref* (atom (when getInitialState (getInitialState *props*)))))
+        (aset *current-vnode* index-component-name component-name)))
     (do
       (open-impl nil typeid key nil nil)
       (when (not= (aget *current-vnode* index-unmount) nil)
         (aset *current-vnode* index-unmount nil))))
   (when (> *new-node* 0)
-    (set! *state-ref* (atom nil))
+    (if-let [getInitialState (and hooks (aget hooks index-hooks-getInitialState))]
+      (set! *state-ref* (atom (getInitialState *props*)))
+      (set! *state-ref* (atom nil)))
     (o/set *state-ref* vnode-stateful-key
            #js [*current-vnode* comp-fn *render-queue* *component-depth*])
     (add-watch *state-ref* ::component set-component-dirty)
     (set! *state* @*state-ref*))
+  (aset *current-vnode* index-comp-dirty-flag nil)
   (aset *current-vnode* index-state-ref *state-ref*)
   (aset *current-vnode* index-comp-props (if props? *props* no-props-flag))
   (aset *current-vnode* index-comp-state *state*))
@@ -612,27 +618,30 @@
        (aget did-mount-hooks (- l 2)) (aget did-mount-hooks (- l 1)))
       (recur (- l 4)))))
 
-(defn- patch-impl [render-queue vnode patch-fn maybe-props]
+;; vnode is nil on first render
+(defn- patch-impl [render-queue parent-vnode vnode patch-fn maybe-props]
   (set! moved-flag #js [])
-  (let [parent-vnode (aget vnode index-parent-vnode)]
-    (binding [*current-vnode* parent-vnode
-              *didMounts* #js []
-              *new-node* 0
-              *moving* false
-              *props* nil
-              *state* nil
-              *state-ref* nil
-              *moved-vnode* nil
-              *skip* false
-              *svg-namespace* 0
-              *component-depth* 0
-              *component-name* nil
-              *render-queue* render-queue]
-      (if (identical? maybe-props no-props-flag)
-        (patch-fn (aget vnode index-key))
-        (patch-fn (aget vnode index-key) maybe-props))
-      (aset parent-vnode index-children-count 0)
-      (call-did-mount-hooks *didMounts*))))
+  (when vnode
+    (aset parent-vnode index-children-count
+          (.indexOf (aget parent-vnode index-children) vnode)))
+  (binding [*current-vnode* parent-vnode
+            *didMounts* #js []
+            *new-node* 0
+            *moving* false
+            *props* nil
+            *state* nil
+            *state-ref* nil
+            *moved-vnode* nil
+            *skip* false
+            *svg-namespace* 0
+            *component-depth* 0
+            *component-name* nil
+            *render-queue* render-queue]
+    (if (identical? maybe-props no-props-flag)
+      (patch-fn (when vnode (aget vnode index-key)))
+      (patch-fn (when vnode (aget vnode index-key)) maybe-props))
+    (aset parent-vnode index-children-count 0)
+    (call-did-mount-hooks *didMounts*)))
 
 (defn- process-render-queue [render-queue]
   (let [l (.-length render-queue)]
@@ -644,28 +653,25 @@
             (when (> j -1)
               (let [vnode (.pop dirty-comps)]
                 (when (aget vnode index-comp-dirty-flag)
-                  (patch-impl render-queue vnode (.pop dirty-comps)
-                              (aget vnode index-comp-props))))
+                  (patch-impl render-queue
+                              (aget vnode index-parent-vnode) vnode
+                              (.pop dirty-comps) (aget vnode index-comp-props))))
               (recur (- j 2)))))
         (recur (inc i)))))
   (aset render-queue 0 nil))
 
 (defn- patch-root-impl [root patch-fn props]
-  ;; On first render (children is nil), create a fake root component.
-  ;; This is necessary to make patch-impl generic
-  ;; Also, render synchronously on first render
+  ;; On first render, render synchronously
   (if-let [children (aget root 0 index-children)]
     (let [render-queue (aget root 1)]
       (aset render-queue 0 true)
       (.requestAnimationFrame js/window
        (fn []
-         (patch-impl (aget root 1) (aget children 0) patch-fn props)
+         (patch-impl (aget root 1)
+                     (aget children 0 index-parent-vnode) (aget children 0)
+                     patch-fn props)
          (process-render-queue render-queue))))
-    (patch-impl (aget root 1)
-                ;; props must be set to something otherwise the component would not render
-                ;; when rendered with props=nil
-                #js [nil (aget root 0) nil nil nil no-props-flag]
-                patch-fn props)))
+    (patch-impl (aget root 1) (aget root 0) nil patch-fn props)))
 
 (defn- patch-root
   ([root patch-fn]
@@ -681,5 +687,4 @@
       (recur (.-firstChild node))))
   ;; root node + render queue
   #js [#js [nil nil node 0 nil] #js []])
-
 

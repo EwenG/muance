@@ -3,11 +3,16 @@
             [clojure.string :as string])
   (:import [cljs.tagged_literals JSValue]))
 
-(defonce typeid (atom 0))
+(defonce typeid (atom 1))
+(defonce comp-typeid (atom -1))
 
 (defn inc-typeid [t]
   ;; MAX_SAFE_INTEGER
-  (if (= t 9007199254740991) 0 (inc t)))
+  (if (= t 9007199254740991) 1 (inc t)))
+
+(defn dec-comp-typeid [t]
+  ;; MAX_SAFE_INTEGER
+  (if (= t -9007199254740991) -1 (dec t)))
 
 (defn safe-symbol [x]
   (when x (symbol x)))
@@ -233,8 +238,8 @@
         :else nil))
 
 (defmacro defcomp [name docstring-or-params & params-body]
-  (swap! typeid inc-typeid)
-  (let [typeid @typeid
+  (swap! comp-typeid dec-comp-typeid)
+  (let [typeid @comp-typeid
         name (if (string? docstring-or-params)
                (vary-meta name assoc :doc docstring-or-params)
                name)
