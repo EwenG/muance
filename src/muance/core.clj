@@ -91,18 +91,21 @@
         (keyword? x) (name x)
         :else `(cljs.core/str ~x)))
 
-(def attr-as-prop
+(def props-to-rename
   {:class :className
    :for :htmlFor
-   :checked :checked
-   :multiple :multiple
-   :muted :muted
-   :selected :selected
-   :value :value})
+   :accept-charset :acceptCharset
+   :http-equiv :httpEquiv})
+
+(defn rename-prop [[k v :as prop]]
+  (if-let [new-k (get props-to-rename k)]
+    [new-k v]
+    prop))
 
 (defn attributes [body]
   (let [attrs (->> (partition 2 body)
-                   (take-while (comp keyword? first)))]
+                   (take-while (comp keyword? first))
+                   (map rename-prop))]
     (when (not (empty? attrs))
       (assert (apply distinct? (map first attrs))
               (str "duplicate attributes: " (pr-str (map first attrs)))))
@@ -168,17 +171,13 @@
             (cond
               (= k ::key) calls
               (= k ::hooks) calls
-              (= k :class) (conj calls (class-call env v))
+              (= k :className) (conj calls (class-call env v))
               (= k :styles) (into calls (style-calls env v))
               (= k ::on)  (into calls (on-calls env v))
               (and (= tag "input") (= k :value))
               (conj calls (if (static? env v)
                             `(prop-static "value" ~v)
                             `(input-value ~v)))
-              (contains? attr-as-prop k)
-              (conj calls (if (static? env v)
-                            `(prop-static ~(as-str (get attr-as-prop k)) ~v)
-                            `(prop ~(as-str (get attr-as-prop k)) ~v)))
               (string/starts-with? (str k) ":xlink")
               (conj calls (if (static? env v)
                             `(attr-ns-static xlink-ns ~(as-str k) ~v)
@@ -187,9 +186,17 @@
               (conj calls (if (static? env v)
                             `(attr-ns-static xml-ns ~(as-str k) ~v)
                             `(attr-ns xml-ns ~(as-str k) ~v)))
+              (string/starts-with? (str k) ":data-")
+              (conj calls (if (static? env v)
+                            `(attr-ns-static nil ~(as-str k) ~v)
+                            `(attr-ns nil ~(as-str k) ~v)))
+              (string/starts-with? (str k) ":aria-")
+              (conj calls (if (static? env v)
+                            `(attr-ns-static nil ~(as-str k) ~v)
+                            `(attr-ns nil ~(as-str k) ~v)))
               :else (conj calls (if (static? env v)
-                                  `(attr-static ~(as-str k) ~v)
-                                  `(attr ~(as-str k) ~v)))))
+                                  `(prop-static ~(as-str k) ~v)
+                                  `(prop ~(as-str k) ~v)))))
           '() attrs))
 
 (defn with-svg-namespace [tag body]

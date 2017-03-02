@@ -19,7 +19,6 @@
 (def ^{:private true} index-text 3)
 
 ;; component specific data
-(def ^{:private true} index-comp-index-in-parent 2)
 (def ^{:private true} index-comp-data 2)
 (def ^{:private true} index-comp-data-svg-namespace 0)
 (def ^{:private true} index-comp-data-index-in-parent 1)
@@ -503,14 +502,6 @@
       (aset prev-attrs attrs-index val)
       (set-fn prev-node ns key val))))
 
-(defn- attr [key val]
-  (attr-impl nil key (when (not (nil? val)) (str val)) set-attribute))
-
-(defn- attr-static [key val]
-  (when (and (> *new-node* 0) (not (nil? val)))
-    (let [node (aget *current-vnode* index-node)]
-      (set-attribute node nil key (str val)))))
-
 (defn- handle-event-handlers [attrs attrs-index key handler f]
   (let [node (aget *current-vnode* index-node)]
     (when-let [prev-handler (aget attrs attrs-index)]
@@ -598,12 +589,16 @@
       (set-attribute node ns key (str val)))))
 
 (defn- prop [key val]
-  (attr-impl nil key val set-property))
+  (if (> *svg-namespace* 0)
+    (attr-impl nil key (when (not (nil? val)) (str val)) set-attribute)
+    (attr-impl nil key val set-property)))
 
 (defn- prop-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
     (let [node (aget *current-vnode* index-node)]
-      (set-property node nil key val))))
+      (if (> *svg-namespace* 0)
+        (set-attribute node nil key (str val))
+        (set-property node nil key val)))))
 
 (defn- input-value [val]
   (attr-impl nil "value" (when (not (nil? val)) (str val)) set-input-value))

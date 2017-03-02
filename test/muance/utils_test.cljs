@@ -19,6 +19,7 @@
                  :state-ref :unmount :component-name :key :key-moved :keymap :keymap-invalid])
 (def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 5 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
+(def comp-data-keys [:svg-namespace :index-in-parent :depth :dirty-flag])
 
 (deftype Parent [typeid])
 
@@ -33,6 +34,15 @@
   (if (m/component? vnode)
     vnode-map
     (assoc vnode-map :namespaceURI (.-namespaceURI (aget vnode m/index-node)))))
+
+(defn format-comp-data [comp-data]
+  (let [l (.-length comp-data)]
+    (loop [m (transient {})
+           i 0]
+      (if (< i l)
+        (recur (assoc! m (get comp-data-keys i) (aget comp-data i))
+               (inc i))
+        (persistent! m)))))
 
 (defn format-vnode [vnode]
   (when vnode
@@ -51,6 +61,8 @@
                           (= i m/index-keymap)
                           (when-let [keymap (aget vnode m/index-keymap)]
                             (into #{} (o/getKeys keymap)))
+                          (and (m/component? vnode) (= i m/index-comp-data))
+                          (format-comp-data (aget vnode i))
                           :else (aget vnode i))]
             (recur (assoc! m (get vnode-keys i) val)
                    (inc i)))

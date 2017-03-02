@@ -8,7 +8,7 @@
             [muance.custom-tags :as tag :include-macros true])
   (:require-macros [muance.h :as h]))
 
-(defonce root (atom nil))
+(defonce vtree (atom nil))
 
 (defn root-static-f []
   (h/div) (h/p))
@@ -17,8 +17,8 @@
   (root-static-f))
 
 (deftest root-static []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root root-static-c))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree root-static-c))
 
 
 
@@ -29,8 +29,8 @@
   (static-f))
 
 (deftest static []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root static-c))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree static-c))
 
 
 
@@ -45,15 +45,15 @@
       :p (h/p)
       :div (h/div))))
 
-(m/defcomp root-nodes-c [nodes]
+(m/defcomp root-nodes-c [noes]
   (root-nodes-f nodes))
 
 (deftest root-nodes []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root root-nodes-c (get nodes-vec 0))
-  (m/patch-root @root root-nodes-c (get nodes-vec 1))
-  (m/patch-root @root root-nodes-c (get nodes-vec 2))
-  (m/patch-root @root root-nodes-c (get nodes-vec 3)))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree root-nodes-c (get nodes-vec 0))
+  (m/patch @vtree root-nodes-c (get nodes-vec 1))
+  (m/patch @vtree root-nodes-c (get nodes-vec 2))
+  (m/patch @vtree root-nodes-c (get nodes-vec 3)))
 
 
 
@@ -64,12 +64,15 @@
        :p (h/p)
        :div (h/div)))))
 
+(m/defcomp nodes-c [nodes]
+  (nodes-f nodes))
+
 (deftest nodes []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root nodes-f (get nodes-vec 0))
-  (m/patch-root @root nodes-f (get nodes-vec 1))
-  (m/patch-root @root nodes-f (get nodes-vec 2))
-  (m/patch-root @root nodes-f (get nodes-vec 3)))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree nodes-c (get nodes-vec 0))
+  (m/patch @vtree nodes-c (get nodes-vec 1))
+  (m/patch @vtree nodes-c (get nodes-vec 2))
+  (m/patch @vtree nodes-c (get nodes-vec 3)))
 
 
 
@@ -87,22 +90,25 @@
        (h/p)
        (h/p ::m/key k)))))
 
+(m/defcomp keyed-c [keys]
+  (keyed-f keys))
+
 (deftest keyed []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root keyed-f (get keys-vec 0))
-  (m/patch-root @root keyed-f (get keys-vec 1))
-  (m/patch-root @root keyed-f (get keys-vec 2))
-  (m/patch-root @root keyed-f (get keys-vec 3))
-  (m/patch-root @root keyed-f (get keys-vec 4))
-  (m/patch-root @root keyed-f (get keys-vec 5)))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree keyed-c (get keys-vec 0))
+  (m/patch @vtree keyed-c (get keys-vec 1))
+  (m/patch @vtree keyed-c (get keys-vec 2))
+  (m/patch @vtree keyed-c (get keys-vec 3))
+  (m/patch @vtree keyed-c (get keys-vec 4))
+  (m/patch @vtree keyed-c (get keys-vec 5)))
 
 
 
 (deftest duplicate-key []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root keyed-f [1])
-  (m/patch-root @root keyed-f [1 1])
-  (m/patch-root @root keyed-f [2 3 1 1 1]))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree keyed-f [1])
+  (m/patch @vtree keyed-f [1 1])
+  (m/patch @vtree keyed-f [2 3 1 1 1]))
 
 
 (defn mismatch-key-typeid-f [x]
@@ -111,10 +117,13 @@
      (do (h/div ::m/key 1) (h/p ::m/key 2))
      (do (h/div ::m/key 2) (h/p ::m/key 1)))))
 
+(m/defcomp mismatch-key-typeid-c [x]
+  (mismatch-key-typeid-f x))
+
 (deftest mismatch-key-typeid []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root mismatch-key-typeid-f true)
-  (m/patch-root @root mismatch-key-typeid-f false))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree mismatch-key-typeid-c true)
+  (m/patch @vtree mismatch-key-typeid-c false))
 
 (defn match-key-typeid-f [x]
   (let [x1 #(h/div ::m/key 1)
@@ -124,10 +133,13 @@
        (do (x1) (x2))
        (do (x2) (x1))))))
 
+(m/defcomp match-key-typeid-c [x]
+  (match-key-typeid-f x))
+
 (deftest match-key-typeid []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root match-key-typeid-f true)
-  (m/patch-root @root match-key-typeid-f false))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree match-key-typeid-c true)
+  (m/patch @vtree match-key-typeid-c false))
 
 
 
@@ -138,8 +150,8 @@
                        selected]}]
   (h/div :class [class1 "f"]
          :foo nil
-         :static-attr "static-attr"
-         :dyn-attr dyn-attr
+         :data-static-attr "static-attr"
+         :aria-dyn-attr dyn-attr
          :styles {:background (when bg-cond "black") :color color})
   (h/input :type "text" :value input-value)
   (h/label :for for-val)
@@ -149,11 +161,14 @@
    (h/option :value "val1")
    (h/option :value "val2" :selected selected)))
 
+(m/defcomp attrs-c [x]
+  (attrs-f x))
+
 (deftest attrs []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root attrs-f
-                {:class1 88 :dyn-attr "val" :bg-cond true :color "green"
-                 :input-value "tt5"
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree attrs-c
+                {:class1 66 :dyn-attr "val2" :bg-cond true :color "green"
+                 :input-value "tt6"
                  :for-val "rr2"
                  :checkbox-value nil :checkbox-checked "e"
                  :selected false})
@@ -164,24 +179,30 @@
 (defn text-f [x]
   (h/div (if x (m/text "e") (h/p)) "<p></p>"))
 
+(m/defcomp text-c [x]
+  (text-f x))
+
 (deftest text []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root text-f true))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree text-c false))
 
 
 
 (defn custom-tag-f []
   (tag/custom-tag))
 
+(m/defcomp custom-tag-c []
+  (custom-tag-f))
+
 (deftest custom-tag []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root custom-tag-f))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree custom-tag-c))
 
 
 
 
 (defn svg-f [href]
-  (h/svg :xml:lang "fr"
+  (h/svg :xml:lang "fr" :svg-attr "svg attr"
    (h/svg
     (h/a :xlink:href href)
     (when true (h/altGlyph))
@@ -191,9 +212,12 @@
    (h/font-face-name))
   (h/p))
 
+(m/defcomp svg-c [href]
+  (svg-f href))
+
 (deftest svg []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root svg-f "rr"))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree svg-c "rr2"))
 
 
 
@@ -201,9 +225,12 @@
 (defn custom-css-f [bg]
   (h/div :styles {:--background bg}))
 
+(m/defcomp custom-css-c [bg]
+  (custom-css-f bg))
+
 (deftest custom-css []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root custom-css-f "red"))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree custom-css-c "red2"))
 
 
 (defn click-handler [e state attr1 attr2 attr3 attr4]
@@ -223,13 +250,16 @@
    ::m/on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
    :styles {:width w :height "500px"}))
 
+(m/defcomp handlers-c [x]
+  (handlers-f x))
+
 (deftest handlers []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root handlers-f ["503px" click-handler "class4"]))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree handlers-c ["503px" click-handler "class4"]))
 
 
 (comment
 
-  (cljs.pprint/pprint (utils/root-vnode @root))
+  (cljs.pprint/pprint (utils/root-vnode @vtree))
 
   )
