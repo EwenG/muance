@@ -12,7 +12,7 @@
 (m/defcomp empty-comp-f [])
 
 (deftest empy-comp []
-  (reset! vtree (m/init-vtree (utils/new-root)))
+  (reset! vtree (m/vtree-init (utils/new-root)))
   (m/patch @vtree empty-comp-f))
 
 
@@ -24,7 +24,7 @@
        (comp-props-inner-f (+ 1 props))))
 
 (deftest static-comp []
-  (reset! vtree (m/init-vtree (utils/new-root)))
+  (reset! vtree (m/vtree-init (utils/new-root)))
   (m/patch @vtree comp-props-f 46))
 
 
@@ -41,7 +41,7 @@
    (h/p)))
 
 (deftest insert-before []
-  (reset! vtree (m/init-vtree (utils/new-root)))
+  (reset! vtree (m/vtree-init (utils/new-root)))
   (m/patch @vtree comp-insert-before-f false))
 
 
@@ -69,7 +69,7 @@
            (comp-keyed-props k props)))))
 
 (deftest comp-keyed []
-  (reset! vtree (m/init-vtree (utils/new-root)))
+  (reset! vtree (m/vtree-init (utils/new-root)))
   (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props3"})
   )
 
@@ -143,7 +143,7 @@
            (comp-attributes-props k props)))))
 
 (deftest comp-attributes []
-  (reset! vtree (m/init-vtree (utils/new-root)))
+  (reset! vtree (m/vtree-init (utils/new-root)))
   (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
   )
 
@@ -153,22 +153,22 @@
   (swap! state-ref inc))
 
 (m/defcomp render-queue-depth2 [props]
-  (h/div :state m/*state*
-         :ff "r"
-         :styles {:width "300px" :height "300px" :border "1px solid green"}
+  (h/div :aria-state m/*state*
+         :class (:depth1-state props)
+         :style {:width "300px" :height "300px" :border "1px solid green"}
          ::m/on [:click render-queue-click]
          (m/text props)))
 
 (m/defcomp render-queue-depth1 [props]
   (h/p :class m/*state*
-       :props props
-       :styles {:width "500px" :height "500px" :border "1px solid black"}
+       :id props
+       :style {:width "500px" :height "500px" :border "1px solid black"}
        ::m/on [:click render-queue-click]
-       (render-queue-depth2 (:depth2 props))))
+       (render-queue-depth2 (assoc (select-keys props [:depth2]) :depth-1-state m/*state*))))
 
 (m/defcomp render-queue-depth1* []
   (h/p :class m/*state*
-       :styles {:width "500px" :height "500px" :border "1px solid red"}
+       :style {:width "500px" :height "500px" :border "1px solid red"}
        ::m/on [:click render-queue-click]))
 
 (m/defcomp render-queue-depth0 [props]
@@ -182,8 +182,25 @@
                               (:depth1 props))})
 
 (deftest render-queue []
-  (reset! vtree (m/init-vtree (utils/new-root)))
-  (m/patch @vtree render-queue-depth0 {:depth1 44 :depth2 "depth2-props"}))
+  (reset! vtree (m/vtree-init (utils/new-root)))
+  (m/patch @vtree render-queue-depth0 {:depth1 44 :depth2 "depth3-props"}))
+
+
+(m/defcomp comp-svg-inner []
+  #_(prn m/*svg-namespace*)
+  (h/rect :width "500px" :height "500px"
+          ::m/on [:click (fn [e state-ref]
+                           (swap! state-ref inc))]
+          (h/foreignObject (h/p 
+                            (m/text "eerrgg")))))
+
+(m/defcomp comp-svg-top []
+  (h/svg :width "500px" :height "500px" (comp-svg-inner))
+  (h/a))
+
+(deftest comp-svg []
+  (reset! vtree (m/vtree-init (utils/new-root)))
+  (m/patch @vtree comp-svg-top))
 
 (comment
 

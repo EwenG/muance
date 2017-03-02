@@ -114,9 +114,9 @@
 (defn handler? [h]
   (and (vector? h) (keyword? (first h))))
 
-(defn validate-attributes [{:keys [::hooks styles ::on] :as attributes}]
+(defn validate-attributes [{:keys [::hooks style ::on] :as attributes}]
   (when (contains? attributes ::hooks) (assert (map? hooks)))
-  (when (contains? attributes :styles) (assert (map? styles)))
+  (when (contains? attributes :style) (assert (map? style)))
   (when (contains? attributes ::on) (assert (or (handler? on) (every? handler? on)))))
 
 (defn body-without-attributes [body attributes]
@@ -132,7 +132,7 @@
       `(prop-static "className" ~class)
       `(prop "className" ~class))))
 
-(defn style-calls [env styles]
+(defn style-calls [env style]
   (map (fn [[k v]]
          (if (string/starts-with? (str k) ":--")
            (if (static? env v)
@@ -141,7 +141,7 @@
            (if (static? env v)
              `(style-static ~(as-str k) ~v)
              `(style ~(as-str k) ~v))))
-       styles))
+       style))
 
 (defn on-calls [env ons]
   (let [static? (partial static? env)
@@ -172,7 +172,7 @@
               (= k ::key) calls
               (= k ::hooks) calls
               (= k :className) (conj calls (class-call env v))
-              (= k :styles) (into calls (style-calls env v))
+              (= k :style) (into calls (style-calls env v))
               (= k ::on)  (into calls (on-calls env v))
               (and (= tag "input") (= k :value))
               (conj calls (if (static? env v)

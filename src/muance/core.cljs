@@ -693,10 +693,14 @@
   ([vtree patch-fn props]
    (patch-root-impl vtree patch-fn props)))
 
-(defn init-vtree [node]
+(defn vtree-init [node]
   (assert (and (goog/isObject node) (= 1 (.-nodeType node))) "can only patch dom nodes")
   ;; root node + render queue
   #js [#js [nil nil node 0 nil] #js []])
+
+(defn vtree-remove-node [vtree]
+  (when-let [children (aget vtree 0 index-children)]
+    (remove-real-node (aget children 0))))
 
 
 ;; node identity is the same implies that the svg-namespace value did not change
