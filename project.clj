@@ -1,4 +1,4 @@
-(defproject muance/muance "1.0.0"
+(defproject muance/muance "0.0.1"
   :source-paths ["src"]
   :test-paths ["test"]
   :dependencies [[org.clojure/clojure "1.9.0-alpha14"]

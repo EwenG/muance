@@ -292,13 +292,5 @@
       (cljs.core/array ~getInitialState ~willReceiveProps
                        ~didMount ~didUpdate ~willUnmount ~willUpdate))))
 
-(defmacro patch
-  ([vtree component]
-   (assert-component &env component "muance.core/patch second parameter must be a component")
-   `(patch-root ~vtree ~component))
-  ([vtree component props]
-   (assert-component &env component "muance.core/patch second parameter must be a component")
-   `(patch-root ~vtree ~component ~props)))
-
 
 

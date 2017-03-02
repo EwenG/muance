@@ -17,7 +17,7 @@
 
 (def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs
                  :state-ref :unmount :component-name :key :key-moved :keymap :keymap-invalid])
-(def comp-keys (-> vnode-keys (assoc 2 :index-in-parent) (assoc 5 :props) (assoc 6 :state)))
+(def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 5 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
 
 (deftype Parent [typeid])

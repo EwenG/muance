@@ -7,13 +7,13 @@
             [muance.utils-test :as utils])
   (:require-macros [muance.h :as h]))
 
-(defonce root (atom nil))
+(defonce vtree (atom nil))
 
 (m/defcomp empty-comp-f [])
 
 (deftest empy-comp []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root empty-comp-f))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree empty-comp-f))
 
 
 (m/defcomp comp-props-inner-f [props]
@@ -24,8 +24,8 @@
        (comp-props-inner-f (+ 1 props))))
 
 (deftest static-comp []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root comp-props-f 46))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree comp-props-f 46))
 
 
 
@@ -41,8 +41,8 @@
    (h/p)))
 
 (deftest insert-before []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root comp-insert-before-f false))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree comp-insert-before-f false))
 
 
 
@@ -69,8 +69,8 @@
            (comp-keyed-props k props)))))
 
 (deftest comp-keyed []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root comp-keyed-f {:keys (get keys-vec 4) :props "comp-props3"})
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props3"})
   )
 
 
@@ -143,8 +143,8 @@
            (comp-attributes-props k props)))))
 
 (deftest comp-attributes []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
   )
 
 
@@ -182,14 +182,12 @@
                               (:depth1 props))})
 
 (deftest render-queue []
-  (reset! root (m/init-vtree (utils/new-root)))
-  (m/patch-root @root render-queue-depth0 {:depth1 44 :depth2 "depth2-props"}))
+  (reset! vtree (m/init-vtree (utils/new-root)))
+  (m/patch @vtree render-queue-depth0 {:depth1 44 :depth2 "depth2-props"}))
 
 (comment
 
-  (m/patch-root @root cc)
-
-  (cljs.pprint/pprint (utils/root-vnode @root))
-  (cljs.pprint/pprint (utils/render-queue @root))
+  (cljs.pprint/pprint (utils/root-vnode @vtree))
+  (cljs.pprint/pprint (utils/render-queue @vtree))
   
   )
