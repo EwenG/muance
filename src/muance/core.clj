@@ -107,9 +107,16 @@
                    (take-while (comp keyword? first))
                    (map rename-prop))]
     (when (not (empty? attrs))
-      (assert (apply distinct? (map first attrs))
-              (str "duplicate attributes: " (pr-str (map first attrs)))))
+      (let [attrs-keys (map first attrs)]
+        (assert (apply distinct? attrs-keys)
+                (str "duplicate attributes: " (pr-str attrs-keys)))
+        (let [attrs-keys (remove #(or (= ::hooks %) (= ::key %) (= ::on %)) attrs-keys)]
+          (when (not (empty? attrs-keys))
+            (assert (apply distinct? (map name attrs-keys))
+                    (str "duplicate attributes: " (pr-str attrs-keys)))))))
     (into {} (map vec attrs))))
+
+(attributes '(::key 1))
 
 (defn handler? [h]
   (and (vector? h) (keyword? (first h))))
@@ -191,6 +198,10 @@
                             `(attr-ns-static nil ~(as-str k) ~v)
                             `(attr-ns nil ~(as-str k) ~v)))
               (string/starts-with? (str k) ":aria-")
+              (conj calls (if (static? env v)
+                            `(attr-ns-static nil ~(as-str k) ~v)
+                            `(attr-ns nil ~(as-str k) ~v)))
+              (= "muance.attribute" (namespace k))
               (conj calls (if (static? env v)
                             `(attr-ns-static nil ~(as-str k) ~v)
                             `(attr-ns nil ~(as-str k) ~v)))

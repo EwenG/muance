@@ -4,6 +4,7 @@
             [goog.dom :as dom]
             [goog.object :as o]
             [muance.core :as m :include-macros true]
+            [muance.attribute :as a]
             [muance.utils-test :as utils]
             [muance.custom-tags :as tag :include-macros true])
   (:require-macros [muance.h :as h]))
@@ -51,6 +52,7 @@
 
 (deftest root-nodes []
   (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
   (m/patch @vtree root-nodes-c (get nodes-vec 0))
   (m/patch @vtree root-nodes-c (get nodes-vec 1))
   (m/patch @vtree root-nodes-c (get nodes-vec 2))
@@ -155,7 +157,7 @@
          :aria-dyn-attr dyn-attr
          :style {:background (when bg-cond "black") :color color})
   (h/input :type "text" :value input-value)
-  (h/label :for for-val)
+  (h/label :for for-val ::a/g "attribute-value")
   (h/input :type "checkbox" :value checkbox-value :checked checkbox-checked)
   (h/input :type "file" :name "rr" :multiple true)
   (h/select
