@@ -45,7 +45,7 @@
       :p (h/p)
       :div (h/div))))
 
-(m/defcomp root-nodes-c [noes]
+(m/defcomp root-nodes-c [nodes]
   (root-nodes-f nodes))
 
 (deftest root-nodes []
@@ -106,9 +106,9 @@
 
 (deftest duplicate-key []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree keyed-f [1])
-  (m/patch @vtree keyed-f [1 1])
-  (m/patch @vtree keyed-f [2 3 1 1 1]))
+  (m/patch @vtree keyed-c [1])
+  (m/patch @vtree keyed-c [1 1])
+  (m/patch @vtree keyed-c [2 3 1 1 1]))
 
 
 (defn mismatch-key-typeid-f [x]
@@ -184,7 +184,7 @@
 
 (deftest text []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree text-c false))
+  (m/patch @vtree text-c true))
 
 
 
@@ -217,7 +217,7 @@
 
 (deftest svg []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree svg-c "rr2"))
+  (m/patch @vtree svg-c "rr3"))
 
 
 

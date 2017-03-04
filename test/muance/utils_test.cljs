@@ -15,13 +15,16 @@
 (defn root []
   (.getElementById js/document "root"))
 
-(def vnode-keys [:typeid :parent :node :chidren-count :children :attrs-count :attrs
-                 :state-ref :unmount :component-name :key :key-moved :keymap :keymap-invalid])
-(def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 5 :props) (assoc 6 :state)))
+(def vnode-keys [:typeid :parent :node :component :chidren-count :children :attrs-count
+                 :attrs :unmount :key :key-moved :keymap :keymap-invalid])
+(def comp-keys (-> vnode-keys (assoc 2 :comp-data)
+                   (assoc 3 :props) (assoc 6 :state) (assoc 7 :state-ref)))
 (def vnode-keys-text [:typeid :parent :node :text])
-(def comp-data-keys [:svg-namespace :index-in-parent :depth :dirty-flag])
+(def comp-data-keys [:component-name :svg-namespace :index-in-parent
+                     :component-depth :dirty-flag])
 
 (deftype Parent [typeid])
+(deftype Component [typeid])
 
 (extend-protocol IPrintWithWriter
   Parent
@@ -58,6 +61,9 @@
           (let [val (cond (= i m/index-parent-vnode)
                           (when-let [p (aget vnode m/index-parent-vnode)]
                             (Parent. (aget p m/index-typeid)))
+                          (and (not (m/component? vnode)) (= i m/index-component))
+                          (when-let [c (aget vnode m/index-component)]
+                            (Component. (aget c m/index-typeid)))
                           (= i m/index-keymap)
                           (when-let [keymap (aget vnode m/index-keymap)]
                             (into #{} (o/getKeys keymap)))

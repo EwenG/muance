@@ -264,9 +264,7 @@
           `([]
             (~name nil)))
        (~(if params-with-props [key-sym params-with-props] [key-sym])
-        (cljs.core/let [parent-props# *props*
-                        parent-state-ref# *state-ref*
-                        parent-comp-name# *component-name*
+        (cljs.core/let [parent-component# *component*
                         hooks# (goog.object/get ~name hooks-key)]
           (open-comp ~(str ana/*cljs-ns* "/" name)
                      ~typeid ~(boolean params-with-props)
@@ -274,7 +272,7 @@
                      ~name ~key-sym hooks#)
           (cljs.core/when-not *skip*
             ~@body)
-          (close-comp parent-comp-name# parent-props# parent-state-ref# hooks#))))))
+          (close-comp parent-component# hooks#))))))
 
 (defn assert-component [env component msg]
   (let [_ (assert (symbol? component) msg)

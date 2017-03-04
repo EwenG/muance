@@ -25,13 +25,13 @@
 
 (deftest static-comp []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree comp-props-f 46))
+  (m/patch @vtree comp-props-f 48))
 
 
 
 
 (m/defcomp comp-insert-before-inner []
-  #_(h/b "rr"))
+  (h/b "rr"))
 
 (m/defcomp comp-insert-before-f [bool]
   (h/div
@@ -70,7 +70,7 @@
 
 (deftest comp-keyed []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props3"})
+  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
   )
 
 
@@ -81,53 +81,64 @@
 
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
-       ::m/hooks {:didMount (fn [props state]
+       ::m/hooks {:didMount (fn [props state-ref]
                               (prn "didMountInner")
                               (prn :props props)
-                              (prn :state state)
-                              (prn m/*component-name*))
+                              (prn :state-ref state-ref)
+                              (prn :component-name (m/component-name m/*current-vnode*))
+                              (prn :node (m/dom-node m/*current-vnode*)))
                   :willUpdate (fn [props state]
                                 (prn "willUpdateInner")
                                 (prn :props props)
                                 (prn :state state)
-                                (prn m/*moving*))
+                                (prn (m/moving? m/*current-vnode*)))
                   :didUpdate (fn [props state]
                                (prn "didUpdateInner")
                                (prn :props props)
                                (prn :state state)
-                               (prn m/*moving*))
-                  :willUnmount (fn [state]
+                               (prn (m/moving? m/*current-vnode*)))
+                  :willUnmount (fn [props state]
                                  (prn "willUnmountInner")
+                                 (prn :props props)
                                  (prn :state state)
-                                 (prn m/*component-name*))}
+                                 (prn :component-name (m/component-name m/*current-vnode*))
+                                 (prn :node (m/dom-node m/*current-vnode*))
+                                 )}
        (m/text props)))
 
 (m/hooks comp-attributes-props
-         {:didMount (fn [props state]
+         {:didMount (fn [props state-ref]
                       (prn "didMount")
                       (prn :props props)
-                      (prn :state state))
+                      (prn :state-ref state-ref)
+                      (prn :component-name (m/component-name m/*current-vnode*))
+                      (prn :nodes (m/dom-nodes m/*current-vnode*)))
           :willUpdate (fn [props state]
                         (prn "willUpdate")
                         (prn :props props)
                         (prn :state state)
-                        (prn m/*moving*))
+                        (prn (m/moving? m/*current-vnode*)))
           :didUpdate (fn [props state]
                        (prn "didUpdate")
                        (prn :props props)
                        (prn :state state)
-                       (prn m/*moving*))
-          :willUnmount (fn [state]
+                       (prn (m/moving? m/*current-vnode*)))
+          :willUnmount (fn [props state]
                          (prn "willUnmount")
-                         (prn :state state))
+                         (prn :props props)
+                         (prn :state state)
+                         (prn :component-name (m/component-name m/*current-vnode*))
+                         (prn :nodes (m/dom-nodes m/*current-vnode*)))
           :getInitialState (fn [props]
                              (prn "getInitialState")
                              (prn :props props)
                              "initialState")
-          :willReceiveProps (fn [props]
+          :willReceiveProps (fn [prev-props props state-ref]
+                              (reset! state-ref "newState")
                               (prn "willReceiveProps")
+                              (prn :prev-props prev-props)
                               (prn :props props)
-                              "newState")})
+                              (prn :state-ref state-ref))})
 
 (m/defcomp comp-attributes-no-props []
   (h/p :class "no-props"))
@@ -144,7 +155,7 @@
 
 (deftest comp-attributes []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props3"})
+  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props1"})
   )
 
 
@@ -172,18 +183,31 @@
        ::m/on [:click render-queue-click]))
 
 (m/defcomp render-queue-depth0 [props]
-  (h/div (render-queue-depth1 props)
+  (h/div (when (:display props) (render-queue-depth1 props))
          (render-queue-depth1*)))
 
 (m/hooks render-queue-depth1
          {:getInitialState (fn [props]
                              0)
           :willReceiveProps (fn [prev-props props state]
-                              (:depth1 props))})
+                              (reset! state (:depth1 props)))
+          :didMount (fn [props state-ref]
+                      (let [node (m/dom-node m/*current-vnode*)]
+                        (swap! state-ref inc)
+                        (o/set node (m/component-name m/*current-vnode*)
+                               (.setInterval js/window #(swap! state-ref inc) 1000))))
+          :willUnmount (fn [props state]
+                         (let [node (m/dom-node m/*current-vnode*)
+                               interval-id (o/get node (m/component-name m/*current-vnode*))]
+                           #_(prn interval-id)
+                           (.clearInterval js/window interval-id)))})
 
 (deftest render-queue []
   (reset! vtree (m/vtree-init (utils/new-root)))
-  (m/patch @vtree render-queue-depth0 {:depth1 44 :depth2 "depth3-props"}))
+  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth4-props" :display false}))
+
+
+
 
 
 (m/defcomp comp-svg-inner []
