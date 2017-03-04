@@ -85,24 +85,24 @@
                               (prn "didMountInner")
                               (prn :props props)
                               (prn :state-ref state-ref)
-                              (prn :component-name (m/component-name m/*current-vnode*))
-                              (prn :node (m/dom-node m/*current-vnode*)))
+                              (prn :component-name (m/component-name m/*vnode*))
+                              (prn :node (m/dom-node m/*vnode*)))
                   :willUpdate (fn [props state]
                                 (prn "willUpdateInner")
                                 (prn :props props)
                                 (prn :state state)
-                                (prn (m/moving? m/*current-vnode*)))
+                                (prn (m/moving? m/*vnode*)))
                   :didUpdate (fn [props state]
                                (prn "didUpdateInner")
                                (prn :props props)
                                (prn :state state)
-                               (prn (m/moving? m/*current-vnode*)))
+                               (prn (m/moving? m/*vnode*)))
                   :willUnmount (fn [props state]
                                  (prn "willUnmountInner")
                                  (prn :props props)
                                  (prn :state state)
-                                 (prn :component-name (m/component-name m/*current-vnode*))
-                                 (prn :node (m/dom-node m/*current-vnode*))
+                                 (prn :component-name (m/component-name m/*vnode*))
+                                 (prn :node (m/dom-node m/*vnode*))
                                  )}
        (m/text props)))
 
@@ -111,24 +111,24 @@
                       (prn "didMount")
                       (prn :props props)
                       (prn :state-ref state-ref)
-                      (prn :component-name (m/component-name m/*current-vnode*))
-                      (prn :nodes (m/dom-nodes m/*current-vnode*)))
+                      (prn :component-name (m/component-name m/*vnode*))
+                      (prn :nodes (m/dom-nodes m/*vnode*)))
           :willUpdate (fn [props state]
                         (prn "willUpdate")
                         (prn :props props)
                         (prn :state state)
-                        (prn (m/moving? m/*current-vnode*)))
+                        (prn (m/moving? m/*vnode*)))
           :didUpdate (fn [props state]
                        (prn "didUpdate")
                        (prn :props props)
                        (prn :state state)
-                       (prn (m/moving? m/*current-vnode*)))
+                       (prn (m/moving? m/*vnode*)))
           :willUnmount (fn [props state]
                          (prn "willUnmount")
                          (prn :props props)
                          (prn :state state)
-                         (prn :component-name (m/component-name m/*current-vnode*))
-                         (prn :nodes (m/dom-nodes m/*current-vnode*)))
+                         (prn :component-name (m/component-name m/*vnode*))
+                         (prn :nodes (m/dom-nodes m/*vnode*)))
           :getInitialState (fn [props]
                              (prn "getInitialState")
                              (prn :props props)
@@ -192,13 +192,13 @@
           :willReceiveProps (fn [prev-props props state]
                               (reset! state (:depth1 props)))
           :didMount (fn [props state-ref]
-                      (let [node (m/dom-node m/*current-vnode*)]
+                      (let [node (m/dom-node m/*vnode*)]
                         (swap! state-ref inc)
-                        (o/set node (m/component-name m/*current-vnode*)
+                        (o/set node (m/component-name m/*vnode*)
                                (.setInterval js/window #(swap! state-ref inc) 1000))))
           :willUnmount (fn [props state]
-                         (let [node (m/dom-node m/*current-vnode*)
-                               interval-id (o/get node (m/component-name m/*current-vnode*))]
+                         (let [node (m/dom-node m/*vnode*)
+                               interval-id (o/get node (m/component-name m/*vnode*))]
                            #_(prn interval-id)
                            (.clearInterval js/window interval-id)))})
 

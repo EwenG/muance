@@ -60,7 +60,7 @@
 (def xlink-ns "http://www.w3.org/1999/xlink")
 
 (def ^:dynamic *state* nil)
-(def ^:dynamic *current-vnode* nil)
+(def ^:dynamic *vnode* nil)
 
 (declare process-render-queue)
 
@@ -107,8 +107,8 @@
 
 (defn- remove-vnode-key [vnode key]
   (aset vnode index-parent-vnode nil)
-  (aset *current-vnode* index-keymap-invalid
-        (inc (aget *current-vnode* index-keymap-invalid))))
+  (aset *vnode* index-keymap-invalid
+        (inc (aget *vnode* index-keymap-invalid))))
 
 (defn- on-state-change [k r o n]
   (when *watch-local-state*
@@ -162,18 +162,18 @@
             component (if (component? vnode) vnode (aget vnode index-component))
             props (aget component index-comp-props)
             state (aget component index-comp-state)]
-        ;; *current-vnode* is rebound in remove-node
-        (set! *current-vnode* vnode)
+        ;; *vnode* is rebound in remove-node
+        (set! *vnode* vnode)
         ((aget vnode index-unmount) props state))
       (recur (dec i))))
   (set! *components-queue-count* queue-start))
 
 (defn- remove-node [vnode]
-  (let [current-vnode *current-vnode*
+  (let [current-vnode *vnode*
         queue-start *components-queue-count*]
     (enqueue-unmounts vnode)
     (call-unmounts queue-start)
-    (set! *current-vnode* current-vnode))
+    (set! *vnode* current-vnode))
   (remove-real-node vnode))
 
 (defn- clean-keymap [vnode]
@@ -221,22 +221,22 @@
   (.setProperty (.-style node) key val))
 
 (defn- init-keymap [keymap]
-  (aset *current-vnode* index-keymap keymap)
-  (aset *current-vnode* index-keymap-invalid 0)
+  (aset *vnode* index-keymap keymap)
+  (aset *vnode* index-keymap-invalid 0)
   keymap)
 
 (defn- new-vnode [typeid element]
-  #js [typeid *current-vnode* element])
+  #js [typeid *vnode* element])
 
 (defn- new-vnode-key [typeid element keymap key]
   (let [keymap (if (nil? keymap) (init-keymap #js {}) keymap)
-        vnode #js [typeid *current-vnode* element
+        vnode #js [typeid *vnode* element
                    nil nil nil nil nil nil key moved-flag]]
     (o/set keymap key vnode)
     vnode))
 
 (defn- new-text-vnode [element text]
-  #js [0 *current-vnode* element text])
+  #js [0 *vnode* element text])
 
 (defn- create-element [tag]
   ;; tag is nil when opening a component
@@ -320,14 +320,14 @@
 ;; (= tag nil) means this is the opening of a component
 (defn- open-impl [tag typeid key vnode-index willUpdate willReceiveProps]
   (let [key (when key (str key))
-        parent-children (or (aget *current-vnode* index-children) #js [])
+        parent-children (or (aget *vnode* index-children) #js [])
         prev (aget parent-children vnode-index)
         prev-key (when prev (aget prev index-key))
         prev-typeid (when prev (aget prev index-typeid))
-        keymap (aget *current-vnode* index-keymap)]
-    (aset *current-vnode* index-children-count (inc vnode-index))
-    (when (nil? (aget *current-vnode* index-children))
-      (aset *current-vnode* index-children parent-children))
+        keymap (aget *vnode* index-keymap)]
+    (aset *vnode* index-children-count (inc vnode-index))
+    (when (nil? (aget *vnode* index-children))
+      (aset *vnode* index-children parent-children))
     (if (and (= key prev-key) (= typeid prev-typeid))
       (let [prev-state (when (nil? tag) (aget prev index-comp-state))
             prev-props (when (nil? tag) (comp-props prev))]
@@ -335,7 +335,7 @@
           (set! *state* @(aget prev index-comp-state-ref)))
         (when key
           (aset prev index-key-moved moved-flag))
-        (set! *current-vnode* prev)
+        (set! *vnode* prev)
         (if (and (nil? tag)
                  (identical? prev-props *props*)
                  (identical? prev-state *state*)
@@ -355,7 +355,7 @@
             (when (nil? *moved-vnode*)
               (set! *moved-vnode* moved-vnode))
             (aset moved-vnode index-key-moved moved-flag)
-            (insert-before *current-vnode* moved-vnode prev)
+            (insert-before *vnode* moved-vnode prev)
             (aset parent-children vnode-index moved-vnode)
             (if (aget moved-vnode index-parent-vnode)
               ;; moved-vnode is amongs the next children -> splice between the
@@ -364,13 +364,13 @@
               (do
                 ;; the moved-node is coming from the previous children -> replace the node
                 ;; at the current index
-                (aset moved-vnode index-parent-vnode *current-vnode*)
-                (aset *current-vnode* index-keymap-invalid
-                      (dec (aget *current-vnode* index-keymap-invalid)))
+                (aset moved-vnode index-parent-vnode *vnode*)
+                (aset *vnode* index-keymap-invalid
+                      (dec (aget *vnode* index-keymap-invalid)))
                 (if prev-key
                   (remove-vnode-key prev prev-key)
                   (when prev (remove-node prev)))))
-            (set! *current-vnode* moved-vnode)
+            (set! *vnode* moved-vnode)
             (when (nil? tag)
               (let [state-ref (aget moved-vnode index-comp-state-ref)]
                 (set! *state* @state-ref)
@@ -400,12 +400,12 @@
                                   (str "Nodes with same key and different typeids. key: " key))
                                  (aset moved-vnode index-key nil)
                                  (when (nil? (aget moved-vnode index-parent-vnode))
-                                   (aset *current-vnode* index-keymap-invalid
-                                         (dec (aget *current-vnode* index-keymap-invalid)))
+                                   (aset *vnode* index-keymap-invalid
+                                         (dec (aget *vnode* index-keymap-invalid)))
                                    (remove-node moved-vnode))
                                  (when prev (aget prev index-key)))
                                :else prev-key)]
-            (insert-before *current-vnode* vnode prev)
+            (insert-before *vnode* vnode prev)
             (aset parent-children vnode-index vnode)
             (set! *new-node* (inc *new-node*))
             (if prev-key
@@ -413,53 +413,53 @@
               (when prev (remove-node prev)))
             (when (= tag "foreignObject")
               (set! *svg-namespace* 0))
-            (set! *current-vnode* vnode)))))))
+            (set! *vnode* vnode)))))))
 
 (defn- open [tag typeid key willUpdate willUnmount]
   (assert (not (nil? *component*))
           (str "tag " tag " was called outside a render loop"))
   (open-impl tag (or typeid tag) key
-             (or (aget *current-vnode* index-children-count) 0)
+             (or (aget *vnode* index-children-count) 0)
              willUpdate nil)
-  (aset *current-vnode* index-component *component*)
-  (when (not= (aget *current-vnode* index-unmount) willUnmount)
-    (aset *current-vnode* index-unmount willUnmount)))
+  (aset *vnode* index-component *component*)
+  (when (not= (aget *vnode* index-unmount) willUnmount)
+    (aset *vnode* index-unmount willUnmount)))
 
 (defn- close-impl [didMount didUpdate]
-  (clean-children *current-vnode*)
-  (clean-keymap *current-vnode*)
+  (clean-children *vnode*)
+  (clean-keymap *vnode*)
   (if (> *new-node* 0)
     (do
       (set! *new-node* (dec *new-node*))
       (when didMount
         (aset *components-queue* *components-queue-count* didMount)
-        (aset *components-queue* (inc *components-queue-count*) *current-vnode*)
+        (aset *components-queue* (inc *components-queue-count*) *vnode*)
         (set! *components-queue-count* (+ *components-queue-count* 2))))
     (when didUpdate (didUpdate *props* *state*)))
-  (when (identical? *moved-vnode* *current-vnode*)
+  (when (identical? *moved-vnode* *vnode*)
     (set! *moved-vnode* nil)))
 
 (defn- close [didMount didUpdate]
-  (when (aget *current-vnode* index-attrs-count)
-    (aset *current-vnode* index-attrs-count 0))
+  (when (aget *vnode* index-attrs-count)
+    (aset *vnode* index-attrs-count 0))
   (close-impl didMount didUpdate)
-  (set! *current-vnode* (aget *current-vnode* index-parent-vnode)))
+  (set! *vnode* (aget *vnode* index-parent-vnode)))
 
 (defn- text-node [t]
-  (let [vnode-index (or (aget *current-vnode* index-children-count) 0)
-        parent-children (or (aget *current-vnode* index-children) #js [])
+  (let [vnode-index (or (aget *vnode* index-children-count) 0)
+        parent-children (or (aget *vnode* index-children) #js [])
         prev (aget parent-children vnode-index)
         prev-key (when prev (aget prev index-key))
         prev-typeid (when prev (aget prev index-typeid))]
-    (aset *current-vnode* index-children-count (inc vnode-index))
-    (when (nil? (aget *current-vnode* index-children))
-      (aset *current-vnode* index-children parent-children))
+    (aset *vnode* index-children-count (inc vnode-index))
+    (when (nil? (aget *vnode* index-children))
+      (aset *vnode* index-children parent-children))
     (if (= 0 prev-typeid)
       (when (not= (aget prev index-text) t)
         (aset prev index-text t)
         (o/set (aget prev index-node) "nodeValue" t))
       (let [vnode (new-text-vnode (.createTextNode js/document t) t)]
-        (insert-before *current-vnode* vnode (aget parent-children vnode-index))
+        (insert-before *vnode* vnode (aget parent-children vnode-index))
         (aset parent-children vnode-index vnode)
         (if prev-key
           (remove-vnode-key prev prev-key)
@@ -475,42 +475,42 @@
 (def ^{:private true} index-hooks-willUpdate 5)
 
 (defn- open-comp [component-name typeid props? props comp-fn key hooks]
-  (assert (not (nil? *current-vnode*))
+  (assert (not (nil? *vnode*))
           (str "tried to render " component-name " outside a render loop"))
-  (let [vnode-index (or (aget *current-vnode* index-children-count) 0)]
+  (let [vnode-index (or (aget *vnode* index-children-count) 0)]
     (set! *props* props)
     (if hooks
       (let [willUnmount (aget hooks index-hooks-willUnmount)]
         (open-impl nil typeid key vnode-index
                    (aget hooks index-hooks-willUpdate)
                    (aget hooks index-hooks-willReceiveProps))
-        (when (not= (aget *current-vnode* index-unmount) willUnmount)
-          (aset *current-vnode* index-unmount willUnmount)))
+        (when (not= (aget *vnode* index-unmount) willUnmount)
+          (aset *vnode* index-unmount willUnmount)))
       (do
         (open-impl nil typeid key vnode-index nil nil)
-        (when (not= (aget *current-vnode* index-unmount) nil)
-          (aset *current-vnode* index-unmount nil))))
-    (set! *component* *current-vnode*)
+        (when (not= (aget *vnode* index-unmount) nil)
+          (aset *vnode* index-unmount nil))))
+    (set! *component* *vnode*)
     (when (> *new-node* 0)
       (let [getInitialState (and hooks (aget hooks index-hooks-getInitialState))
             state-ref (if getInitialState
                         (atom (getInitialState *props*))
                         (atom nil))]
         (o/set state-ref vnode-stateful-key
-               #js [*current-vnode* comp-fn *render-queue*])
+               #js [*vnode* comp-fn *render-queue*])
         (add-watch state-ref ::component on-state-change)
-        (aset *current-vnode* index-comp-state-ref state-ref))
-      (aset *current-vnode* index-comp-data #js[])
-      (set! *state* @(aget *current-vnode* index-comp-state-ref)))
-    (let [comp-data (aget *current-vnode* index-comp-data)]
+        (aset *vnode* index-comp-state-ref state-ref))
+      (aset *vnode* index-comp-data #js[])
+      (set! *state* @(aget *vnode* index-comp-state-ref)))
+    (let [comp-data (aget *vnode* index-comp-data)]
       (aset comp-data index-comp-data-name component-name)
       (aset comp-data index-comp-data-svg-namespace *svg-namespace*)
       (aset comp-data index-comp-data-index-in-parent vnode-index)
       (aset comp-data index-comp-data-depth *component-depth*)
       (set! *component-depth* (inc *component-depth*))
       (aset comp-data index-comp-data-dirty-flag nil))
-    (aset *current-vnode* index-comp-props (if props? *props* no-props-flag))
-    (aset *current-vnode* index-comp-state *state*)))
+    (aset *vnode* index-comp-props (if props? *props* no-props-flag))
+    (aset *vnode* index-comp-state *state*)))
 
 (defn- close-comp [parent-component hooks]
   (when-not *skip*
@@ -519,26 +519,26 @@
       (close-impl nil nil)))
   (set! *component* parent-component)
   (set! *component-depth* (dec *component-depth*))
-  (set! *current-vnode* (aget *current-vnode* index-parent-vnode))
+  (set! *vnode* (aget *vnode* index-parent-vnode))
   (when parent-component
     (set! *props* (aget parent-component index-comp-props))
     (set! *state* (aget parent-component index-comp-state)))
   (set! *skip* false))
 
 (defn- attr-impl [ns key val set-fn]
-  (let [attrs-index (or (aget *current-vnode* index-attrs-count) 0)
-        prev-attrs (or (aget *current-vnode* index-attrs) #js [])
+  (let [attrs-index (or (aget *vnode* index-attrs-count) 0)
+        prev-attrs (or (aget *vnode* index-attrs) #js [])
         prev-val (aget prev-attrs attrs-index)
-        prev-node (aget *current-vnode* index-node)]
-    (when (nil? (aget *current-vnode* index-attrs))
-      (aset *current-vnode* index-attrs prev-attrs))
-    (aset *current-vnode* index-attrs-count (inc attrs-index))
+        prev-node (aget *vnode* index-node)]
+    (when (nil? (aget *vnode* index-attrs))
+      (aset *vnode* index-attrs prev-attrs))
+    (aset *vnode* index-attrs-count (inc attrs-index))
     (when (not= prev-val val)
       (aset prev-attrs attrs-index val)
       (set-fn prev-node ns key val))))
 
 (defn- handle-event-handlers [attrs attrs-index key handler f]
-  (let [node (aget *current-vnode* index-node)]
+  (let [node (aget *vnode* index-node)]
     (when-let [prev-handler (aget attrs attrs-index)]
       (.removeEventListener node key prev-handler false))
     (when handler
@@ -547,13 +547,13 @@
     (aset attrs (inc attrs-index) f)))
 
 (defn- on-impl [key f param1 param2 param3 param-count]
-  (let [attrs-index (or (aget *current-vnode* index-attrs-count) 0)
-        prev-attrs (or (aget *current-vnode* index-attrs) #js [])
+  (let [attrs-index (or (aget *vnode* index-attrs-count) 0)
+        prev-attrs (or (aget *vnode* index-attrs) #js [])
         prev-f (aget prev-attrs (inc attrs-index))
         state-ref (aget *component* index-comp-state-ref)]
-    (when (nil? (aget *current-vnode* index-attrs))
-      (aset *current-vnode* index-attrs prev-attrs))
-    (aset *current-vnode* index-attrs-count (+ attrs-index 2 param-count))
+    (when (nil? (aget *vnode* index-attrs))
+      (aset *vnode* index-attrs prev-attrs))
+    (aset *vnode* index-attrs-count (+ attrs-index 2 param-count))
     (cond (and (= 0 param-count) (not= prev-f f))
           (let [handler (when (fn? f) (fn [e] (f e state-ref)))]
             (handle-event-handlers prev-attrs attrs-index key handler f))
@@ -584,7 +584,7 @@
 
 (defn- on-static [key f]
   (when (and (> *new-node* 0) (fn? f))
-    (let [node (aget *current-vnode* index-node)
+    (let [node (aget *vnode* index-node)
           state-ref (aget *component* index-comp-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref)) false))))
 
@@ -593,7 +593,7 @@
 
 (defn- on-static1 [key f attr1]
   (when (and (> *new-node* 0) (fn? f))
-    (let [node (aget *current-vnode* index-node)
+    (let [node (aget *vnode* index-node)
           state-ref (aget *component* index-comp-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref attr1)) false))))
 
@@ -602,7 +602,7 @@
 
 (defn- on-static2 [key f attr1 attr2]
   (when (and (> *new-node* 0) (fn? f))
-    (let [node (aget *current-vnode* index-node)
+    (let [node (aget *vnode* index-node)
           state-ref (aget *component* index-comp-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref attr1 attr2)) false))))
 
@@ -611,7 +611,7 @@
 
 (defn- on-static3 [key f attr1 attr2 attr3]
   (when (and (> *new-node* 0) (fn? f))
-    (let [node (aget *current-vnode* index-node)
+    (let [node (aget *vnode* index-node)
           state-ref (aget *component* index-comp-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref attr1 attr2 attr3)) false))))
 
@@ -620,7 +620,7 @@
 
 (defn- attr-ns-static [ns key val]
   (when (and (> *new-node* 0) (not (nil? val)))
-    (let [node (aget *current-vnode* index-node)]
+    (let [node (aget *vnode* index-node)]
       (set-attribute node ns key (str val)))))
 
 (defn- prop [key val]
@@ -630,7 +630,7 @@
 
 (defn- prop-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
-    (let [node (aget *current-vnode* index-node)]
+    (let [node (aget *vnode* index-node)]
       (if (> *svg-namespace* 0)
         (set-attribute node nil key (str val))
         (set-property node nil key val)))))
@@ -643,7 +643,7 @@
 
 (defn- style-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
-    (let [node (aget *current-vnode* index-node)]
+    (let [node (aget *vnode* index-node)]
       (set-style node nil key (str val)))))
 
 (defn- style-custom [key val]
@@ -651,7 +651,7 @@
 
 (defn- style-custom-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
-    (let [node (aget *current-vnode* index-node)]
+    (let [node (aget *vnode* index-node)]
       (set-style-custom node nil key (str val)))))
 
 (defn- call-did-mount-hooks [i]
@@ -660,7 +660,7 @@
           component (if (component? vnode) vnode (aget vnode index-component))
           props (aget component index-comp-props)
           state-ref (aget component index-comp-state-ref)]
-      (set! *current-vnode* vnode)
+      (set! *vnode* vnode)
       ((aget *components-queue* (dec i)) props state-ref))
     (recur (- i 2))))
 
@@ -670,7 +670,7 @@
   (when vnode
     (aset parent-vnode index-children-count
           (aget vnode index-comp-data index-comp-data-index-in-parent)))
-  (binding [*current-vnode* parent-vnode
+  (binding [*vnode* parent-vnode
             *component* nil
             *new-node* 0
             *props* nil
