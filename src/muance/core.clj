@@ -215,15 +215,15 @@
   [env tag typeid body]
   (let [compile-form (partial compile-form env)
         {key ::key
-         {willUpdate :willUpdate willUnmount :willUnmount
-          didMount :didMount didUpdate :didUpdate} ::hooks :as attrs} (attributes body)
+         {will-update :will-update will-unmount :will-unmount
+          did-mount :did-mount did-update :did-update} ::hooks :as attrs} (attributes body)
         _ (validate-attributes attrs)
         body (body-without-attributes body attrs)]
     (with-svg-namespace tag
-      `((open ~tag ~typeid ~key ~willUpdate ~willUnmount)
+      `((open ~tag ~typeid ~key ~will-update ~will-unmount)
         ~@(attribute-calls env tag attrs)
         ~@(map compile-form body)
-        (close ~didMount ~didUpdate)))))
+        (close ~did-mount ~did-update)))))
 
 (defmacro text [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
@@ -287,15 +287,15 @@
   (assert-component
    &env component "muance.core/hooks first parameter must be a component")
   (assert (map? hooks-map))
-  (let [{willUpdate :willUpdate willUnmount :willUnmount
-         didMount :didMount didUpdate :didUpdate
-         willReceiveProps :willReceiveProps
-         getInitialState :getInitialState :as attrs} hooks-map]
+  (let [{will-update :will-update will-unmount :will-unmount
+         did-mount :did-mount did-update :did-update
+         will-receive-props :will-receive-props
+         get-initial-state :get-initial-state :as attrs} hooks-map]
     `(goog.object/set
       ~component
       hooks-key
-      (cljs.core/array ~getInitialState ~willReceiveProps
-                       ~didMount ~didUpdate ~willUnmount ~willUpdate))))
+      (cljs.core/array ~get-initial-state ~will-receive-props
+                       ~did-mount ~did-update ~will-unmount ~will-update))))
 
 
 

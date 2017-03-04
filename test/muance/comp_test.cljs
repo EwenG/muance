@@ -81,24 +81,24 @@
 
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
-       ::m/hooks {:didMount (fn [props state-ref]
-                              (prn "didMountInner")
+       ::m/hooks {:did-mount (fn [props state-ref]
+                              (prn "did-mount-inner")
                               (prn :props props)
                               (prn :state-ref state-ref)
                               (prn :component-name (m/component-name m/*vnode*))
                               (prn :node (m/dom-node m/*vnode*)))
-                  :willUpdate (fn [props state]
-                                (prn "willUpdateInner")
+                  :will-update (fn [props state]
+                                (prn "will-update-inner")
                                 (prn :props props)
                                 (prn :state state)
                                 (prn (m/moving? m/*vnode*)))
-                  :didUpdate (fn [props state]
-                               (prn "didUpdateInner")
+                  :did-update (fn [props state]
+                               (prn "did-update-inner")
                                (prn :props props)
                                (prn :state state)
                                (prn (m/moving? m/*vnode*)))
-                  :willUnmount (fn [props state]
-                                 (prn "willUnmountInner")
+                  :will-unmount (fn [props state]
+                                 (prn "will-unmount-inner")
                                  (prn :props props)
                                  (prn :state state)
                                  (prn :component-name (m/component-name m/*vnode*))
@@ -107,35 +107,35 @@
        (m/text props)))
 
 (m/hooks comp-attributes-props
-         {:didMount (fn [props state-ref]
-                      (prn "didMount")
+         {:did-mount (fn [props state-ref]
+                      (prn "did-mount")
                       (prn :props props)
                       (prn :state-ref state-ref)
                       (prn :component-name (m/component-name m/*vnode*))
                       (prn :nodes (m/dom-nodes m/*vnode*)))
-          :willUpdate (fn [props state]
-                        (prn "willUpdate")
+          :will-update (fn [props state]
+                        (prn "will-update")
                         (prn :props props)
                         (prn :state state)
                         (prn (m/moving? m/*vnode*)))
-          :didUpdate (fn [props state]
-                       (prn "didUpdate")
+          :did-update (fn [props state]
+                       (prn "did-update")
                        (prn :props props)
                        (prn :state state)
                        (prn (m/moving? m/*vnode*)))
-          :willUnmount (fn [props state]
-                         (prn "willUnmount")
+          :will-unmount (fn [props state]
+                         (prn "will-unmount")
                          (prn :props props)
                          (prn :state state)
                          (prn :component-name (m/component-name m/*vnode*))
                          (prn :nodes (m/dom-nodes m/*vnode*)))
-          :getInitialState (fn [props]
-                             (prn "getInitialState")
+          :get-initial-state (fn [props]
+                             (prn "get-initial-state")
                              (prn :props props)
-                             "initialState")
-          :willReceiveProps (fn [prev-props props state-ref]
-                              (reset! state-ref "newState")
-                              (prn "willReceiveProps")
+                             "initial-state")
+          :will-receive-props (fn [prev-props props state-ref]
+                              (reset! state-ref "new-state")
+                              (prn "will-receive-props")
                               (prn :prev-props prev-props)
                               (prn :props props)
                               (prn :state-ref state-ref))})
@@ -187,16 +187,16 @@
          (render-queue-depth1*)))
 
 (m/hooks render-queue-depth1
-         {:getInitialState (fn [props]
+         {:get-initial-state (fn [props]
                              0)
-          :willReceiveProps (fn [prev-props props state]
+          :will-receive-props (fn [prev-props props state]
                               (reset! state (:depth1 props)))
-          :didMount (fn [props state-ref]
+          :did-mount (fn [props state-ref]
                       (let [node (m/dom-node m/*vnode*)]
                         (swap! state-ref inc)
                         (o/set node (m/component-name m/*vnode*)
                                (.setInterval js/window #(swap! state-ref inc) 1000))))
-          :willUnmount (fn [props state]
+          :will-unmount (fn [props state]
                          (let [node (m/dom-node m/*vnode*)
                                interval-id (o/get node (m/component-name m/*vnode*))]
                            #_(prn interval-id)

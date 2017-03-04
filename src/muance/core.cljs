@@ -41,7 +41,7 @@
 (def ^{:dynamic true :private true} *props* nil)
 (def ^{:dynamic true :private true} *skip* nil)
 (def ^{:dynamic true :private true} *component-depth* nil)
-;; Used to avoid re-rendering when a state update is done from a willReceiveProps hook
+;; Used to avoid re-rendering when a state update is done from a will-receive-props hook
 (def ^{:dynamic true :private true} *watch-local-state* true)
 (def ^{:dynamic true :private true} *components-queue-count* nil)
 (def ^{:dynamic true :private true} *render-queue* nil)
@@ -51,7 +51,7 @@
 
 (defonce ^{:private true} moved-flag nil)
 (defonce ^{:private true} no-props-flag #js [])
-;; Used to enqueue components with a didMount / willUnmount hook, and then call the hooks
+;; Used to enqueue components with a did-mount / will-unmount hook, and then call the hooks
 ;; in order
 (def ^{:private true} *components-queue* #js [])
 
@@ -307,9 +307,9 @@
     (when (and next-moved-node (not (identical? next-moved-node to-node)))
       (recur nodes (inc index) next-moved-node to-node))))
 
-(defn- will-receive-props [prev-props props state-ref willReceiveProps]
-  (when (and willReceiveProps (not (identical? prev-props props)))
-    (willReceiveProps prev-props props state-ref)
+(defn- call-will-receive-props [prev-props props state-ref will-receive-props]
+  (when (and will-receive-props (not (identical? prev-props props)))
+    (will-receive-props prev-props props state-ref)
     (set! *state* @state-ref)))
 
 (defn- comp-props [vnode]
@@ -318,7 +318,7 @@
       nil props)))
 
 ;; (= tag nil) means this is the opening of a component
-(defn- open-impl [tag typeid key vnode-index willUpdate willReceiveProps]
+(defn- open-impl [tag typeid key vnode-index will-update will-receive-props]
   (let [key (when key (str key))
         parent-children (or (aget *vnode* index-children) #js [])
         prev (aget parent-children vnode-index)
@@ -343,10 +343,10 @@
           (set! *skip* true)
           (do
             (when (nil? tag)
-              (will-receive-props prev-props *props*
+              (call-will-receive-props prev-props *props*
                                   (aget prev index-comp-state-ref)
-                                  willReceiveProps))
-            (when willUpdate (willUpdate *props* *state*)))))
+                                  will-receive-props))
+            (when will-update (will-update *props* *state*)))))
       (let [moved-vnode (and key keymap (o/get keymap key))]
         (if (and moved-vnode
                  (= typeid (aget moved-vnode index-typeid))
@@ -374,8 +374,8 @@
             (when (nil? tag)
               (let [state-ref (aget moved-vnode index-comp-state-ref)]
                 (set! *state* @state-ref)
-                (will-receive-props prev-props *props* state-ref willReceiveProps)))
-            (when willUpdate (willUpdate *props* *state*)))
+                (call-will-receive-props prev-props *props* state-ref will-receive-props)))
+            (when will-update (will-update *props* *state*)))
           ;; this is a new node -> replace the node at the current index
           (let [vnode (if key
                         (new-vnode-key typeid (create-element tag) keymap key)
@@ -415,34 +415,34 @@
               (set! *svg-namespace* 0))
             (set! *vnode* vnode)))))))
 
-(defn- open [tag typeid key willUpdate willUnmount]
+(defn- open [tag typeid key will-update will-unmount]
   (assert (not (nil? *component*))
           (str "tag " tag " was called outside a render loop"))
   (open-impl tag (or typeid tag) key
              (or (aget *vnode* index-children-count) 0)
-             willUpdate nil)
+             will-update nil)
   (aset *vnode* index-component *component*)
-  (when (not= (aget *vnode* index-unmount) willUnmount)
-    (aset *vnode* index-unmount willUnmount)))
+  (when (not= (aget *vnode* index-unmount) will-unmount)
+    (aset *vnode* index-unmount will-unmount)))
 
-(defn- close-impl [didMount didUpdate]
+(defn- close-impl [did-mount did-update]
   (clean-children *vnode*)
   (clean-keymap *vnode*)
   (if (> *new-node* 0)
     (do
       (set! *new-node* (dec *new-node*))
-      (when didMount
-        (aset *components-queue* *components-queue-count* didMount)
+      (when did-mount
+        (aset *components-queue* *components-queue-count* did-mount)
         (aset *components-queue* (inc *components-queue-count*) *vnode*)
         (set! *components-queue-count* (+ *components-queue-count* 2))))
-    (when didUpdate (didUpdate *props* *state*)))
+    (when did-update (did-update *props* *state*)))
   (when (identical? *moved-vnode* *vnode*)
     (set! *moved-vnode* nil)))
 
-(defn- close [didMount didUpdate]
+(defn- close [did-mount did-update]
   (when (aget *vnode* index-attrs-count)
     (aset *vnode* index-attrs-count 0))
-  (close-impl didMount didUpdate)
+  (close-impl did-mount did-update)
   (set! *vnode* (aget *vnode* index-parent-vnode)))
 
 (defn- text-node [t]
@@ -467,12 +467,12 @@
 
 (def ^{:private true} hooks-key "muance.core/hooks")
 
-(def ^{:private true} index-hooks-getInitialState 0)
-(def ^{:private true} index-hooks-willReceiveProps 1)
-(def ^{:private true} index-hooks-didMount 2)
-(def ^{:private true} index-hooks-didUpdate 3)
-(def ^{:private true} index-hooks-willUnmount 4)
-(def ^{:private true} index-hooks-willUpdate 5)
+(def ^{:private true} index-hooks-get-initial-state 0)
+(def ^{:private true} index-hooks-will-receive-props 1)
+(def ^{:private true} index-hooks-did-mount 2)
+(def ^{:private true} index-hooks-did-update 3)
+(def ^{:private true} index-hooks-will-unmount 4)
+(def ^{:private true} index-hooks-will-update 5)
 
 (defn- open-comp [component-name typeid props? props comp-fn key hooks]
   (assert (not (nil? *vnode*))
@@ -480,21 +480,21 @@
   (let [vnode-index (or (aget *vnode* index-children-count) 0)]
     (set! *props* props)
     (if hooks
-      (let [willUnmount (aget hooks index-hooks-willUnmount)]
+      (let [will-unmount (aget hooks index-hooks-will-unmount)]
         (open-impl nil typeid key vnode-index
-                   (aget hooks index-hooks-willUpdate)
-                   (aget hooks index-hooks-willReceiveProps))
-        (when (not= (aget *vnode* index-unmount) willUnmount)
-          (aset *vnode* index-unmount willUnmount)))
+                   (aget hooks index-hooks-will-update)
+                   (aget hooks index-hooks-will-receive-props))
+        (when (not= (aget *vnode* index-unmount) will-unmount)
+          (aset *vnode* index-unmount will-unmount)))
       (do
         (open-impl nil typeid key vnode-index nil nil)
         (when (not= (aget *vnode* index-unmount) nil)
           (aset *vnode* index-unmount nil))))
     (set! *component* *vnode*)
     (when (> *new-node* 0)
-      (let [getInitialState (and hooks (aget hooks index-hooks-getInitialState))
-            state-ref (if getInitialState
-                        (atom (getInitialState *props*))
+      (let [get-initial-state (and hooks (aget hooks index-hooks-get-initial-state))
+            state-ref (if get-initial-state
+                        (atom (get-initial-state *props*))
                         (atom nil))]
         (o/set state-ref vnode-stateful-key
                #js [*vnode* comp-fn *render-queue*])
@@ -515,7 +515,7 @@
 (defn- close-comp [parent-component hooks]
   (when-not *skip*
     (if hooks
-      (close-impl (aget hooks index-hooks-didMount) (aget hooks index-hooks-didUpdate))
+      (close-impl (aget hooks index-hooks-did-mount) (aget hooks index-hooks-did-update))
       (close-impl nil nil)))
   (set! *component* parent-component)
   (set! *component-depth* (dec *component-depth*))
