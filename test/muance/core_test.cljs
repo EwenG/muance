@@ -17,7 +17,8 @@
   (root-static-f))
 
 (deftest root-static []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
   (m/patch @vtree root-static-c))
 
 
@@ -29,7 +30,7 @@
   (static-f))
 
 (deftest static []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree static-c))
 
 
@@ -49,7 +50,7 @@
   (root-nodes-f nodes))
 
 (deftest root-nodes []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree root-nodes-c (get nodes-vec 0))
   (m/patch @vtree root-nodes-c (get nodes-vec 1))
   (m/patch @vtree root-nodes-c (get nodes-vec 2))
@@ -68,7 +69,7 @@
   (nodes-f nodes))
 
 (deftest nodes []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree nodes-c (get nodes-vec 0))
   (m/patch @vtree nodes-c (get nodes-vec 1))
   (m/patch @vtree nodes-c (get nodes-vec 2))
@@ -94,7 +95,7 @@
   (keyed-f keys))
 
 (deftest keyed []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree keyed-c (get keys-vec 0))
   (m/patch @vtree keyed-c (get keys-vec 1))
   (m/patch @vtree keyed-c (get keys-vec 2))
@@ -105,7 +106,7 @@
 
 
 (deftest duplicate-key []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree keyed-c [1])
   (m/patch @vtree keyed-c [1 1])
   (m/patch @vtree keyed-c [2 3 1 1 1]))
@@ -121,7 +122,7 @@
   (mismatch-key-typeid-f x))
 
 (deftest mismatch-key-typeid []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree mismatch-key-typeid-c true)
   (m/patch @vtree mismatch-key-typeid-c false))
 
@@ -137,7 +138,7 @@
   (match-key-typeid-f x))
 
 (deftest match-key-typeid []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree match-key-typeid-c true)
   (m/patch @vtree match-key-typeid-c false))
 
@@ -165,7 +166,7 @@
   (attrs-f x))
 
 (deftest attrs []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree attrs-c
                 {:class1 66 :dyn-attr "val2" :bg-cond true :color "green"
                  :input-value "tt6"
@@ -183,7 +184,7 @@
   (text-f x))
 
 (deftest text []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree text-c true))
 
 
@@ -195,7 +196,7 @@
   (custom-tag-f))
 
 (deftest custom-tag []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree custom-tag-c))
 
 
@@ -216,7 +217,7 @@
   (svg-f href))
 
 (deftest svg []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree svg-c "rr3"))
 
 
@@ -229,7 +230,7 @@
   (custom-css-f bg))
 
 (deftest custom-css []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree custom-css-c "red2"))
 
 
@@ -254,7 +255,7 @@
   (handlers-f x))
 
 (deftest handlers []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree handlers-c ["503px" click-handler "class4"]))
 
 

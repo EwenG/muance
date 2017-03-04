@@ -12,7 +12,7 @@
 (m/defcomp empty-comp-f [])
 
 (deftest empy-comp []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree empty-comp-f))
 
 
@@ -24,7 +24,7 @@
        (comp-props-inner-f (+ 1 props))))
 
 (deftest static-comp []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree comp-props-f 48))
 
 
@@ -41,7 +41,7 @@
    (h/p)))
 
 (deftest insert-before []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree comp-insert-before-f false))
 
 
@@ -69,7 +69,7 @@
            (comp-keyed-props k props)))))
 
 (deftest comp-keyed []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
   )
 
@@ -154,7 +154,7 @@
            (comp-attributes-props k props)))))
 
 (deftest comp-attributes []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props1"})
   )
 
@@ -203,7 +203,7 @@
                            (.clearInterval js/window interval-id)))})
 
 (deftest render-queue []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth4-props" :display false}))
 
 
@@ -223,7 +223,7 @@
   (h/a))
 
 (deftest comp-svg []
-  (reset! vtree (m/vtree-init (utils/new-root)))
+  (reset! vtree (m/vtree (utils/new-root)))
   (m/patch @vtree comp-svg-top))
 
 (comment

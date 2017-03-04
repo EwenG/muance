@@ -1,4 +1,5 @@
 (ns muance.core
+  (:refer-clojure :exclude [remove])
   (:require [goog.object :as o]))
 
 (def ^{:private true} index-typeid 0)
@@ -278,28 +279,28 @@
         (recur (aget vnode index-parent-vnode)))
       found-node)))
 
-(defn- insert-before* [parent-node vnode ref-node]
+(defn- insert-vnode-before* [parent-node vnode ref-node]
   (if (component? vnode)
     (when-let [children (aget vnode index-children)]
       (let [l (.-length children)]
         (loop [i 0]
           (when (< i l)
-            (insert-before* parent-node (aget children i) ref-node)
+            (insert-vnode-before* parent-node (aget children i) ref-node)
             (recur (inc i))))))
     (.insertBefore parent-node (aget vnode index-node) ref-node)))
 
-(defn- insert-before [parent-vnode vnode ref-vnode]
+(defn- insert-vnode-before [parent-vnode vnode ref-vnode]
   (if (component? parent-vnode)
     (let [parent-node (parent-node parent-vnode)]
       (if-let [ref-node (when ref-vnode (ref-node-down ref-vnode))]
-        (insert-before* parent-node vnode ref-node)
-        (insert-before* parent-node vnode (ref-node-up parent-vnode))))
+        (insert-vnode-before* parent-node vnode ref-node)
+        (insert-vnode-before* parent-node vnode (ref-node-up parent-vnode))))
     (let [parent-node (aget parent-vnode index-node)]
       (if (nil? ref-vnode)
-        (insert-before* parent-node vnode nil)
+        (insert-vnode-before* parent-node vnode nil)
         (if-let [ref-node (ref-node-down ref-vnode)]
-          (insert-before* parent-node vnode ref-node)
-          (insert-before* parent-node vnode (ref-node-up parent-vnode)))))))
+          (insert-vnode-before* parent-node vnode ref-node)
+          (insert-vnode-before* parent-node vnode (ref-node-up parent-vnode)))))))
 
 (defn- splice-to [nodes index moved-node to-node]
   (let [next-moved-node (aget nodes index)]
@@ -355,7 +356,7 @@
             (when (nil? *moved-vnode*)
               (set! *moved-vnode* moved-vnode))
             (aset moved-vnode index-key-moved moved-flag)
-            (insert-before *vnode* moved-vnode prev)
+            (insert-vnode-before *vnode* moved-vnode prev)
             (aset parent-children vnode-index moved-vnode)
             (if (aget moved-vnode index-parent-vnode)
               ;; moved-vnode is amongs the next children -> splice between the
@@ -405,7 +406,7 @@
                                    (remove-node moved-vnode))
                                  (when prev (aget prev index-key)))
                                :else prev-key)]
-            (insert-before *vnode* vnode prev)
+            (insert-vnode-before *vnode* vnode prev)
             (aset parent-children vnode-index vnode)
             (set! *new-node* (inc *new-node*))
             (if prev-key
@@ -459,7 +460,7 @@
         (aset prev index-text t)
         (o/set (aget prev index-node) "nodeValue" t))
       (let [vnode (new-text-vnode (.createTextNode js/document t) t)]
-        (insert-before *vnode* vnode (aget parent-children vnode-index))
+        (insert-vnode-before *vnode* vnode (aget parent-children vnode-index))
         (aset parent-children vnode-index vnode)
         (if prev-key
           (remove-vnode-key prev prev-key)
@@ -711,18 +712,28 @@
         (recur (inc i)))))
   (aset render-queue 0 nil))
 
-(defn- patch-root-impl [root patch-fn props]
+(defn- patch-root-impl [vtree patch-fn props]
   ;; On first render, render synchronously
-  (if-let [children (aget root 0 index-children)]
-    (let [render-queue (aget root 1)]
-      (aset render-queue 0 true)
-      (.requestAnimationFrame js/window
-       (fn []
-         (patch-impl (aget root 1)
-                     (aget children 0 index-parent-vnode) (aget children 0)
-                     patch-fn props)
-         (process-render-queue render-queue))))
-    (patch-impl (aget root 1) (aget root 0) nil patch-fn props)))
+  (let [vnode (.-vnode vtree)
+        render-queue (.-render-queue vtree)]
+    (if-let [children (aget vnode index-children)]
+      (do (aset render-queue 0 true)
+          (.requestAnimationFrame js/window
+                                  (fn []
+                                    (patch-impl render-queue
+                                                vnode (aget children 0)
+                                                patch-fn props)
+                                    (process-render-queue render-queue))))
+      (patch-impl render-queue vnode nil patch-fn props))))
+
+(deftype VTree [vnode render-queue])
+
+(defn vtree
+  ([]
+   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 nil] #js []))
+  ([node]
+   (assert (and (goog/isObject node) (= 1 (.-nodeType node))) "can only patch dom nodes")
+   (VTree. #js [nil nil node nil 0 nil] #js [])))
 
 (defn patch
   ([vtree patch-fn]
@@ -730,14 +741,11 @@
   ([vtree patch-fn props]
    (patch-root-impl vtree patch-fn props)))
 
-(defn vtree-init [node]
-  (assert (and (goog/isObject node) (= 1 (.-nodeType node))) "can only patch dom nodes")
-  ;; root node + render queue
-  #js [#js [nil nil node nil 0 nil] #js []])
-
-(defn vtree-remove-node [vtree]
-  (when-let [children (aget vtree 0 index-children)]
+(defn remove [vtree]
+  (when-let [children (aget (.-vnode vtree) index-children)]
     (remove-real-node (aget children 0))))
 
+(defn insert-before [vtree parent-node ref-node]
+  (insert-vnode-before* parent-node (.-vnode vtree) ref-node))
 
 ;; node identity is the same implies that the svg-namespace value did not change
