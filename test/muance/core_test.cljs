@@ -18,8 +18,8 @@
   (root-static-f))
 
 (deftest root-static []
-  (reset! vtree (m/vtree (utils/new-root)))
   (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree root-static-c))
 
 
@@ -31,7 +31,8 @@
   (static-f))
 
 (deftest static []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree static-c))
 
 
@@ -51,31 +52,13 @@
   (root-nodes-f nodes))
 
 (deftest root-nodes []
-  (reset! vtree (m/vtree (utils/new-root)))
   (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree root-nodes-c (get nodes-vec 0))
   (m/patch @vtree root-nodes-c (get nodes-vec 1))
   (m/patch @vtree root-nodes-c (get nodes-vec 2))
   (m/patch @vtree root-nodes-c (get nodes-vec 3)))
 
-
-
-(defn nodes-f [nodes]
-  (h/div
-   (doseq [n nodes]
-     (case n
-       :p (h/p)
-       :div (h/div)))))
-
-(m/defcomp nodes-c [nodes]
-  (nodes-f nodes))
-
-(deftest nodes []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree nodes-c (get nodes-vec 0))
-  (m/patch @vtree nodes-c (get nodes-vec 1))
-  (m/patch @vtree nodes-c (get nodes-vec 2))
-  (m/patch @vtree nodes-c (get nodes-vec 3)))
 
 
 
@@ -97,7 +80,8 @@
   (keyed-f keys))
 
 (deftest keyed []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree keyed-c (get keys-vec 0))
   (m/patch @vtree keyed-c (get keys-vec 1))
   (m/patch @vtree keyed-c (get keys-vec 2))
@@ -108,7 +92,8 @@
 
 
 (deftest duplicate-key []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree keyed-c [1])
   (m/patch @vtree keyed-c [1 1])
   (m/patch @vtree keyed-c [2 3 1 1 1]))
@@ -124,7 +109,8 @@
   (mismatch-key-typeid-f x))
 
 (deftest mismatch-key-typeid []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree mismatch-key-typeid-c true)
   (m/patch @vtree mismatch-key-typeid-c false))
 
@@ -140,7 +126,8 @@
   (match-key-typeid-f x))
 
 (deftest match-key-typeid []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree match-key-typeid-c true)
   (m/patch @vtree match-key-typeid-c false))
 
@@ -168,9 +155,10 @@
   (attrs-f x))
 
 (deftest attrs []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree attrs-c
-                {:class1 66 :dyn-attr "val2" :bg-cond true :color "green"
+                {:class1 67 :dyn-attr "val2" :bg-cond true :color "green"
                  :input-value "tt6"
                  :for-val "rr2"
                  :checkbox-value nil :checkbox-checked "e"
@@ -186,7 +174,8 @@
   (text-f x))
 
 (deftest text []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree text-c true))
 
 
@@ -198,7 +187,8 @@
   (custom-tag-f))
 
 (deftest custom-tag []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree custom-tag-c))
 
 
@@ -219,8 +209,9 @@
   (svg-f href))
 
 (deftest svg []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree svg-c "rr3"))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree svg-c "rr4"))
 
 
 
@@ -232,20 +223,21 @@
   (custom-css-f bg))
 
 (deftest custom-css []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree custom-css-c "red2"))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree custom-css-c "red"))
 
 
-(defn click-handler [e state attr1 attr2 attr3 attr4]
+(defn click-handler [e state-ref attr1 attr2 attr3 attr4]
   (prn "clicked")
-  (prn state)
+  (prn state-ref)
   (prn attr1)
   (prn attr2)
   (prn attr3))
 
-(defn mouseover-handler [e state]
+(defn mouseover-handler [e state-ref]
   (prn "mouseover2")
-  (prn state))
+  (prn state-ref))
 
 (defn handlers-f [[w handler c]]
   (h/div
@@ -257,12 +249,13 @@
   (handlers-f x))
 
 (deftest handlers []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree handlers-c ["503px" click-handler "class4"]))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree handlers-c ["503px" click-handler "class5"]))
 
 
 (comment
 
-  (cljs.pprint/pprint (utils/root-vnode @vtree))
+  (cljs.pprint/pprint (utils/format-vtree @vtree))
 
   )

@@ -12,7 +12,8 @@
 (m/defcomp empty-comp-f [])
 
 (deftest empy-comp []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree empty-comp-f))
 
 
@@ -24,8 +25,9 @@
        (comp-props-inner-f (+ 1 props))))
 
 (deftest static-comp []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree comp-props-f 48))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree comp-props-f 50))
 
 
 
@@ -41,7 +43,8 @@
    (h/p)))
 
 (deftest insert-before []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree comp-insert-before-f false))
 
 
@@ -69,8 +72,9 @@
            (comp-keyed-props k props)))))
 
 (deftest comp-keyed []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 0) :props "comp-props3"})
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props4"})
   )
 
 
@@ -154,8 +158,9 @@
            (comp-attributes-props k props)))))
 
 (deftest comp-attributes []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props1"})
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props5"})
   )
 
 
@@ -188,30 +193,32 @@
 
 (m/hooks render-queue-depth1
          {:get-initial-state (fn [props]
-                             0)
+                               0)
           :will-receive-props (fn [prev-props props state]
-                              (reset! state (:depth1 props)))
+                                (reset! state (:depth1 props)))
           :did-mount (fn [props state-ref]
-                      (let [node (m/dom-node m/*vnode*)]
-                        (swap! state-ref inc)
-                        (o/set node (m/component-name m/*vnode*)
-                               (.setInterval js/window #(swap! state-ref inc) 1000))))
+                       (let [node (m/dom-node m/*vnode*)]
+                         (swap! state-ref inc)
+                         (o/set node (m/component-name m/*vnode*)
+                                (.setInterval js/window #(swap! state-ref inc) 1000))))
           :will-unmount (fn [props state]
-                         (let [node (m/dom-node m/*vnode*)
-                               interval-id (o/get node (m/component-name m/*vnode*))]
-                           #_(prn interval-id)
-                           (.clearInterval js/window interval-id)))})
+                          (let [node (m/dom-node m/*vnode*)
+                                interval-id (o/get node (m/component-name m/*vnode*))]
+                            #_(prn interval-id)
+                            (.clearInterval  interval-id)
+                            #_(.clearInterval js/window interval-id)))})
 
 (deftest render-queue []
-  (reset! vtree (m/vtree (utils/new-root)))
-  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth4-props" :display false}))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth5-props" :display false}))
 
 
 
 
 
 (m/defcomp comp-svg-inner []
-  #_(prn m/*svg-namespace*)
+  (prn m/*svg-namespace*)
   (h/rect :width "500px" :height "500px"
           ::m/on [:click (fn [e state-ref]
                            (swap! state-ref inc))]
@@ -223,12 +230,27 @@
   (h/a))
 
 (deftest comp-svg []
-  (reset! vtree (m/vtree (utils/new-root)))
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
   (m/patch @vtree comp-svg-top))
+
+
+
+
+(m/defcomp comp-exception-keyed []
+  (h/p))
+
+(m/defcomp comp-exception-f []
+  )
+
+(deftest comp-exception []
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree comp-exception-f))
 
 (comment
 
-  (cljs.pprint/pprint (utils/root-vnode @vtree))
-  (cljs.pprint/pprint (utils/render-queue @vtree))
+  (cljs.pprint/pprint (utils/format-vtree @vtree))
+  (cljs.pprint/pprint (utils/format-render-queue @vtree))
   
   )
