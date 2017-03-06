@@ -45,7 +45,7 @@
 (deftest insert-before []
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-insert-before-f false))
+  (m/patch @vtree comp-insert-before-f true))
 
 
 
@@ -86,63 +86,63 @@
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
        ::m/hooks {:did-mount (fn [props state-ref]
-                              (prn "did-mount-inner")
-                              (prn :props props)
-                              (prn :state-ref state-ref)
-                              (prn :component-name (m/component-name m/*vnode*))
-                              (prn :node (m/dom-node m/*vnode*)))
+                               (prn "did-mount-inner")
+                               (prn :props props)
+                               (prn :state-ref state-ref)
+                               (prn :component-name (m/component-name m/*vnode*))
+                               (prn :node (m/dom-node m/*vnode*)))
                   :will-update (fn [props state]
-                                (prn "will-update-inner")
+                                 (prn "will-update-inner")
+                                 (prn :props props)
+                                 (prn :state state)
+                                 (prn (m/moving? m/*vnode*)))
+                  :did-update (fn [props state]
+                                (prn "did-update-inner")
                                 (prn :props props)
                                 (prn :state state)
                                 (prn (m/moving? m/*vnode*)))
-                  :did-update (fn [props state]
-                               (prn "did-update-inner")
-                               (prn :props props)
-                               (prn :state state)
-                               (prn (m/moving? m/*vnode*)))
                   :will-unmount (fn [props state]
-                                 (prn "will-unmount-inner")
-                                 (prn :props props)
-                                 (prn :state state)
-                                 (prn :component-name (m/component-name m/*vnode*))
-                                 (prn :node (m/dom-node m/*vnode*))
-                                 )}
+                                  (prn "will-unmount-inner")
+                                  (prn :props props)
+                                  (prn :state state)
+                                  (prn :component-name (m/component-name m/*vnode*))
+                                  (prn :node (m/dom-node m/*vnode*))
+                                  )}
        (m/text props)))
 
 (m/hooks comp-attributes-props
          {:did-mount (fn [props state-ref]
-                      (prn "did-mount")
-                      (prn :props props)
-                      (prn :state-ref state-ref)
-                      (prn :component-name (m/component-name m/*vnode*))
-                      (prn :nodes (m/dom-nodes m/*vnode*)))
+                       (prn "did-mount")
+                       (prn :props props)
+                       (prn :state-ref state-ref)
+                       (prn :component-name (m/component-name m/*vnode*))
+                       (prn :nodes (m/dom-nodes m/*vnode*)))
           :will-update (fn [props state]
-                        (prn "will-update")
+                         (prn "will-update")
+                         (prn :props props)
+                         (prn :state state)
+                         (prn (m/moving? m/*vnode*)))
+          :did-update (fn [props state]
+                        (prn "did-update")
                         (prn :props props)
                         (prn :state state)
                         (prn (m/moving? m/*vnode*)))
-          :did-update (fn [props state]
-                       (prn "did-update")
-                       (prn :props props)
-                       (prn :state state)
-                       (prn (m/moving? m/*vnode*)))
           :will-unmount (fn [props state]
-                         (prn "will-unmount")
-                         (prn :props props)
-                         (prn :state state)
-                         (prn :component-name (m/component-name m/*vnode*))
-                         (prn :nodes (m/dom-nodes m/*vnode*)))
+                          (prn "will-unmount")
+                          (prn :props props)
+                          (prn :state state)
+                          (prn :component-name (m/component-name m/*vnode*))
+                          (prn :nodes (m/dom-nodes m/*vnode*)))
           :get-initial-state (fn [props]
-                             (prn "get-initial-state")
-                             (prn :props props)
-                             "initial-state")
+                               (prn "get-initial-state")
+                               (prn :props props)
+                               "initial-state")
           :will-receive-props (fn [prev-props props state-ref]
-                              (reset! state-ref "new-state")
-                              (prn "will-receive-props")
-                              (prn :prev-props prev-props)
-                              (prn :props props)
-                              (prn :state-ref state-ref))})
+                                (reset! state-ref "new-state")
+                                (prn "will-receive-props")
+                                (prn :prev-props prev-props)
+                                (prn :props props)
+                                (prn :state-ref state-ref))})
 
 (m/defcomp comp-attributes-no-props []
   (h/p :class "no-props"))
@@ -204,14 +204,14 @@
           :will-unmount (fn [props state]
                           (let [node (m/dom-node m/*vnode*)
                                 interval-id (o/get node (m/component-name m/*vnode*))]
-                            #_(prn interval-id)
-                            (.clearInterval  interval-id)
-                            #_(.clearInterval js/window interval-id)))})
+                            ;; throws an exception
+                            #_(.clearInterval interval-id)
+                            (.clearInterval js/window interval-id)))})
 
 (deftest render-queue []
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth5-props" :display false}))
+  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth5-props" :display true}))
 
 
 
@@ -236,17 +236,41 @@
 
 
 
+(defn exception-click-handler [e state-ref]
+  (swap! state-ref inc))
 
-(m/defcomp comp-exception-keyed []
-  (h/p))
+(m/defcomp comp-exception-keyed [b]
+  (let [comp-k (m/key m/*vnode*)]
+    (h/p
+     :style {:width "500px" :height "500px"}
+     ::m/on [:click exception-click-handler]
+     (m/text comp-k " " m/*state*))))
 
-(m/defcomp comp-exception-f []
-  )
+(m/hooks comp-exception-keyed {:will-update (fn [b]
+                                              (when (= (m/key m/*vnode*) "3")
+                                                #_(throw (js/Error. "err"))))
+                               :will-unmount (fn [b]
+                                               (when (= (m/key m/*vnode*) "3")
+                                                 #_(throw (js/Error. "err"))))})
+
+#_(m/defcomp comp-exception-f [b]
+  (if b
+    (do (comp-exception-keyed 1 nil) (comp-exception-keyed 2 nil)
+        (comp-exception-keyed 3 b))
+    (do (comp-exception-keyed 1 nil) (comp-exception-keyed 4 nil)
+        (comp-exception-keyed 3 b) (comp-exception-keyed 2 nil))))
+
+(m/defcomp comp-exception-f [b]
+  (if b
+    (do (comp-exception-keyed 1 nil) (comp-exception-keyed 2 nil)
+        (comp-exception-keyed 3 b) (comp-exception-keyed 4 nil))
+    (do (comp-exception-keyed 1 nil) (comp-exception-keyed 4 nil)
+        (h/p) (comp-exception-keyed 2 nil))))
 
 (deftest comp-exception []
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-exception-f))
+  (m/patch @vtree comp-exception-f true))
 
 (comment
 

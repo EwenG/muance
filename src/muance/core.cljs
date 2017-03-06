@@ -1,5 +1,5 @@
 (ns muance.core
-  (:refer-clojure :exclude [remove])
+  (:refer-clojure :exclude [remove key])
   (:require [goog.object :as o]))
 
 (def ^{:private true} index-typeid 0)
@@ -39,6 +39,8 @@
 ;; Thus it keeps the value of the higher moved node in the tree, even if child nodes are
 ;; themselves moved. This is necessary to know when to unset the value 
 (def ^{:dynamic true :private true} *moved-vnode* nil)
+;; used to handle a edge case whene open-impl returns two vnodes to be removed
+(def ^{:dynamic true :private true} *vnode-to-remove* nil)
 (def ^{:dynamic true :private true} *props* nil)
 (def ^{:dynamic true :private true} *skip* nil)
 (def ^{:dynamic true :private true} *component-depth* nil)
@@ -51,6 +53,7 @@
 (def ^{:dynamic true :private true} *svg-namespace* nil)
 
 (defonce ^{:private true} moved-flag nil)
+(defonce ^{:private true} moving-flag #js [])
 (defonce ^{:private true} no-props-flag #js [])
 ;; Used to enqueue components with a did-mount / will-unmount hook, and then call the hooks
 ;; in order
@@ -106,10 +109,15 @@
     (ref-node-down vnode)
     (aget vnode index-node)))
 
+(defn key [vnode]
+  (assert vnode "muance.core/key expects a vnode.")
+  (aget vnode index-key))
+
 (defn- remove-vnode-key [vnode key]
-  (aset vnode index-parent-vnode nil)
-  (aset *vnode* index-keymap-invalid
-        (inc (aget *vnode* index-keymap-invalid))))
+  (let [parent (aget vnode index-parent-vnode)]
+    (aset vnode index-key-moved moving-flag)
+    (aset parent index-keymap-invalid
+          (inc (aget parent index-keymap-invalid)))))
 
 (defn- on-state-change [k r o n]
   (when *watch-local-state*
@@ -183,7 +191,7 @@
       (let [keymap (aget vnode index-keymap)]
         (o/forEach keymap
                    (fn [v k]
-                     (when (nil? (aget v index-parent-vnode))
+                     (when (identical? (aget v index-key-moved) moving-flag)
                        (remove-node v)
                        (o/remove keymap k)))))
       (aset vnode index-keymap-invalid 0))))
@@ -331,10 +339,11 @@
     (aset *vnode* index-children-count (inc vnode-index))
     (when (nil? (aget *vnode* index-children))
       (aset *vnode* index-children parent-children))
-    (if (and (= key prev-key) (= typeid prev-typeid))
+    (if (and (= typeid prev-typeid) (= key prev-key))
       (do (when key
             (aset prev index-key-moved moved-flag))
-          (set! *vnode* prev))
+          (set! *vnode* prev)
+          nil)
       (let [moved-vnode (and key keymap (o/get keymap key))]
         (if (and moved-vnode
                  (= typeid (aget moved-vnode index-typeid))
@@ -342,75 +351,76 @@
           (do
             (when (nil? *moved-vnode*)
               (set! *moved-vnode* moved-vnode))
-            (aset moved-vnode index-key-moved moved-flag)
             (insert-vnode-before *vnode* moved-vnode prev)
             (aset parent-children vnode-index moved-vnode)
-            (if (aget moved-vnode index-parent-vnode)
+            (if (not (identical? moving-flag (aget moved-vnode index-key-moved)))
               ;; moved-vnode is amongs the next children -> splice between the
               ;; current index and the index of the moved node
               (splice-to parent-children (inc vnode-index) prev moved-vnode)
-              (do
-                ;; the moved-node is coming from the previous children -> replace the node
-                ;; at the current index
-                (aset moved-vnode index-parent-vnode *vnode*)
-                (aset *vnode* index-keymap-invalid
-                      (dec (aget *vnode* index-keymap-invalid)))
-                (if prev-key
-                  (remove-vnode-key prev prev-key)
-                  (when prev (remove-node prev)))))
-            (set! *vnode* moved-vnode))
+              ;; the moved-node is coming from the previous children -> replace the node
+              ;; at the current index
+              (aset *vnode* index-keymap-invalid
+                    (dec (aget *vnode* index-keymap-invalid))))
+            (aset moved-vnode index-key-moved moved-flag)
+            (set! *vnode* moved-vnode)
+            prev)
           ;; this is a new node -> replace the node at the current index
           (let [vnode (if key
                         (new-vnode-key typeid (create-element tag) keymap key)
-                        (new-vnode typeid (create-element tag)))
-                ;; handle invalid states
-                ;; the prev-key is refreshed since it can be modified by the invalid state
-                ;; handling
-                prev-key (cond (and moved-vnode
-                                    (identical?
-                                     moved-flag (aget moved-vnode index-key-moved)))
-                               (do
-                                 (.error js/console
-                                         (str "Duplicate key: " key
-                                              " in component "
-                                              (component-name moved-vnode)))
-                                 (aset moved-vnode index-key nil)
-                                 (when prev (aget prev index-key)))
-                               (and moved-vnode (not= typeid (aget moved-vnode index-typeid)))
-                               (do
-                                 #_(.warn
-                                  js/console
-                                  (str "Nodes with same key and different typeids. key: " key))
-                                 (aset moved-vnode index-key nil)
-                                 (when (nil? (aget moved-vnode index-parent-vnode))
-                                   (aset *vnode* index-keymap-invalid
-                                         (dec (aget *vnode* index-keymap-invalid)))
-                                   (remove-node moved-vnode))
-                                 (when prev (aget prev index-key)))
-                               :else prev-key)]
+                        (new-vnode typeid (create-element tag)))]
+            ;; handle invalid states
+            (cond (and moved-vnode
+                       (identical?
+                        moved-flag (aget moved-vnode index-key-moved)))
+                  (do
+                    (.error js/console
+                            (str "Duplicate key: " key
+                                 " in component "
+                                 (component-name moved-vnode)))
+                    (aset moved-vnode index-key nil))
+                  (and moved-vnode (not= typeid (aget moved-vnode index-typeid)))
+                  (do
+                    #_(.warn
+                       js/console
+                       (str "Nodes with same key and different typeids. key: " key))
+                    (when (identical? (aget moved-vnode index-key-moved) moving-flag)
+                      (aset *vnode* index-keymap-invalid
+                            (dec (aget *vnode* index-keymap-invalid)))
+                      (set! *vnode-to-remove* moved-vnode))
+                    (aset moved-vnode index-key nil)))
             (insert-vnode-before *vnode* vnode prev)
             (aset parent-children vnode-index vnode)
             (set! *new-node* (inc *new-node*))
-            (if prev-key
-              (remove-vnode-key prev prev-key)
-              (when prev (remove-node prev)))
-            (set! *vnode* vnode)))))
-    (when (aget *vnode* index-children-count)
-      (aset *vnode* index-children-count 0))
-    (clean-keymap *vnode*)))
+            (set! *vnode* vnode)
+            prev))))))
 
 (defn- open [tag typeid key will-update will-unmount]
   (assert (not (nil? *component*))
           (str "tag " tag " was called outside a render loop"))
-  (open-impl tag (or typeid tag) key
-             (or (aget *vnode* index-children-count) 0))
-  (if (> *new-node* 0)
-    (do (aset *vnode* index-component *component*)
-        (when (= tag "foreignObject")
-          (set! *svg-namespace* 0)))
-    (when will-update (will-update *props* *state*)))
-  (when (aget *vnode* index-attrs-count)
-    (aset *vnode* index-attrs-count 0))
+  (let [prev (open-impl tag (or typeid tag) key
+                        (or (aget *vnode* index-children-count) 0))]
+    (if (> *new-node* 0)
+      (do (aset *vnode* index-component *component*)
+          (when prev
+            (if-let [prev-key (aget prev index-key)]
+              (remove-vnode-key prev prev-key)
+              (remove-node prev)))
+          (when *vnode-to-remove*
+            (remove-node *vnode-to-remove*)
+            (set! *vnode-to-remove* nil))
+          (when (= tag "foreignObject")
+            (set! *svg-namespace* 0)))
+      (do
+        (when prev
+          (if-let [prev-key (aget prev index-key)]
+            (remove-vnode-key prev prev-key)
+            (remove-node prev)))
+        (when will-update (will-update *props* *state*))
+        (when (aget *vnode* index-children-count)
+          (aset *vnode* index-children-count 0))
+        (when (aget *vnode* index-attrs-count)
+          (aset *vnode* index-attrs-count 0))
+        (clean-keymap *vnode*))))
   (when (not= (aget *vnode* index-unmount) will-unmount)
     (aset *vnode* index-unmount will-unmount)))
 
@@ -467,8 +477,8 @@
   (let [vnode-index (or (aget *vnode* index-children-count) 0)
         will-unmount (when hooks (aget hooks index-hooks-will-unmount))
         will-update (when hooks (aget hooks index-hooks-will-update))
-        will-receive-props (when hooks (aget hooks index-hooks-will-receive-props))]
-    (open-impl nil typeid key vnode-index)
+        will-receive-props (when hooks (aget hooks index-hooks-will-receive-props))
+        prev (open-impl nil typeid key vnode-index)]
     (set! *props* props)
     (when (not= (aget *vnode* index-unmount) will-unmount)
       (aset *vnode* index-unmount will-unmount))
@@ -482,6 +492,15 @@
         (aset *vnode* index-comp-data
               #js[component-name *svg-namespace* vnode-index *component-depth*])
         (aset *vnode* index-comp-state-ref state-ref)
+        ;; call will-unmount at the end to keep things consistent in case of an exception
+        ;; in will-unmount
+        (when prev
+          (if-let [prev-key (aget prev index-key)]
+            (remove-vnode-key prev prev-key)
+            (remove-node prev)))
+        (when *vnode-to-remove*
+          (remove-node *vnode-to-remove*)
+          (set! *vnode-to-remove* nil))
         ;; call get-initial-state at the end to keep things consistent in case of an exception
         ;; in get-initial-state
         (if get-initial-state
@@ -501,6 +520,10 @@
         (aset comp-data index-comp-data-dirty-flag nil)
         (when *moved-vnode*
           (aset comp-data index-comp-data-index-in-parent vnode-index))
+        (when prev
+          (if-let [prev-key (aget prev index-key)]
+            (remove-vnode-key prev prev-key)
+            (remove-node prev)))
         (if (and 
              (identical? prev-props *props*)
              (identical? prev-state state)
@@ -508,7 +531,10 @@
           (set! *skip* true)
           (do
             (call-will-receive-props prev-props *props* state-ref will-receive-props)
-            (when will-update (will-update *props* *state*))))))
+            (when will-update (will-update *props* *state*))))
+        (when (aget *vnode* index-children-count)
+          (aset *vnode* index-children-count 0))
+        (clean-keymap *vnode*)))
     (set! *component* *vnode*)
     (set! *component-depth* (inc *component-depth*))))
 
@@ -677,6 +703,7 @@
             *props* nil
             *state* nil
             *moved-vnode* nil
+            *vnode-to-remove* nil
             *skip* false
             *svg-namespace* (if vnode
                               (aget vnode index-comp-data index-comp-data-svg-namespace)
@@ -737,22 +764,35 @@
    (patch-root-impl vtree patch-fn props)))
 
 ;; todo append to a documentFragment
-#_(defn remove [vtree]
-  (when-let [children (aget (.-vnode vtree) index-children)]
-    (remove-real-node (aget children 0))))
+(defn remove [vtree]
+  (let [vnode (.-vnode vtree)
+        fragment (.createDocumentFragment js/document)]
+    (when-let [comp (aget vnode index-children 0)]
+      (insert-vnode-before* fragment comp nil))
+    (aset vnode index-node fragment)))
 
 (defn insert-before [vtree parent-node ref-node]
   (let [vnode (.-vnode vtree)]
-    (if-let [comp (aget vnode index-children 0)]
+    (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* parent-node comp ref-node))
     (aset vnode index-node parent-node)))
 
 (defn append-child [vtree parent-node]
   (let [vnode (.-vnode vtree)]
-    (if-let [comp (aget vnode index-children 0)]
+    (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* parent-node comp nil))
     (aset vnode index-node parent-node)))
 
 ;; node identity is the same implies that the svg-namespace value did not change
+
 ;; index-in-parent is set when moving node (including in splice) to keep things consistent
 ;; in case of an exception in a hook function
+
+;; exceptions in hooks:
+;; did-mount -> should prevent the call of next did-mounts, since did-mounts are called after
+;; the patch process
+;; will-update -> should prevent the rest of the patch process
+;; did-update -> should prevent the rest of the patch process
+;; will-unmount -> should prevent the removal of the node. May prevent next patch calls when
+;; the exception happens on a keyed vnode, because the next patching processes will try to
+;; clean the keyed node (and fail).

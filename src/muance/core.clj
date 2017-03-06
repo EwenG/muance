@@ -41,7 +41,7 @@
               clj-var (resolve var)]
           (cond (::tag (meta clj-var))
                 (compile-element-macro env (::tag (meta clj-var)) nil (rest form))
-                (= #'text clj-var) `(muance.core/text-node ~@(rest form))
+                (= #'text clj-var) `(muance.core/text-node (cljs.core/str ~@(rest form)))
                 :else form))
         (string? form) `(muance.core/text-node ~form)
         :else form))
@@ -237,6 +237,7 @@
         (close ~did-mount ~did-update)))))
 
 (defmacro text [& text]
+  (prn text)
   `(muance.core/text-node (cljs.core/str ~@text)))
 
 (defn with-macro-meta [tag]
