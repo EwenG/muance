@@ -237,7 +237,6 @@
         (close ~did-mount ~did-update)))))
 
 (defmacro text [& text]
-  (prn text)
   `(muance.core/text-node (cljs.core/str ~@text)))
 
 (defn with-macro-meta [tag]
