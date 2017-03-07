@@ -33,19 +33,21 @@
 
 
 (m/defcomp comp-insert-before-inner []
-  (h/b "rr"))
+  (h/b "rr")
+  (h/p "inner"))
 
 (m/defcomp comp-insert-before-f [bool]
   (h/div
    (if bool
      (comp-insert-before-inner)
-     (h/a))
+     (do (h/a)
+         (h/p "outer")))
    (h/p)))
 
 (deftest insert-before []
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-insert-before-f true))
+  (m/patch @vtree comp-insert-before-f false))
 
 
 
@@ -56,7 +58,8 @@
                [0 1 3 4 5]])
 
 (m/defcomp comp-keyed-props [props]
-  (h/p :class "props" (m/text props)))
+  (h/p :class "props" (m/text props))
+  (h/div))
 
 (m/defcomp comp-keyed-no-props []
   (h/p :class "no-props"))
@@ -74,7 +77,7 @@
 (deftest comp-keyed []
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props4"})
+  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 0) :props "comp-props4"})
   )
 
 
