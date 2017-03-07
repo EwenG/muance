@@ -1,6 +1,5 @@
 (ns muance.todo
   (:require
-   [goog.object :as o]
    [muance.core :as m :include-macros true]
    [clojure.string])
   (:require-macros [muance.h :as h]))
