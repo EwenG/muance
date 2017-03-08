@@ -1,19 +1,20 @@
 # Muance
 
-A virtual dom library for Clojurescript, featuring:
+A virtual dom library for Clojurescript.
 
-- Stateful components
-- Lifecycle hooks can be set on any node
-- Deterministic parent/children call order of lifecycle hooks
+- Muance supports stateful components
+- Lifecycle hooks can be set on any component or DOM node
+- Lifecycle hooks have a defined parent/children execution order
+- Event handlers can be passed arbitrary parameters
 - No synthetic event system
-- svg support
-- Asynchronous rendering
+- Svg support
+- Asynchronous rendering by default
 
 Muance exposes a side effectful API which mutates an in memory representation of a virtual dom. 
 
 ## Quick start
 
-Creates a component and renders it on the page:
+The following code snippet creates a component and renders it on the page:
 
 ```
 (ns muance.example
@@ -29,19 +30,27 @@ Creates a component and renders it on the page:
 (m/patch vtree example-component) ;; Renders the component
 ```
 
-Muance API is defined in the `muance.core` namespace. DOM tag names are defined in the `muance.h` namespace.
-- `(muance.core/vtree)`: Creates a new vtree
-- `(m/append-child vtree parent-node)`: Append the real node associated with the `vtree` to the children of the `parent-node`
-- `(m/insert-before vtree ref-node)`: Insert the real node associated with the `vtree` before the `ref-node`
-- `(m/patch vtree component)`: Patch the `vtree` using the `component`
+Muance API is defined in the `muance.core` namespace. HTML tag names are defined in the `muance.h` namespace.
 
 ## Todo app
 
-See the [todo example](https://github.com/EwenG/muance/tree/master/examples/todo).
+See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/todo).
+
+## Top level API
+
+- `(muance.core/vtree)`: Creates a new vtree
+- `(m/append-child vtree parent-node)`: Append the real node associated with the `vtree` to the children of the `parent-node`
+- `(m/insert-before vtree ref-node)`: Insert the real node associated with the `vtree` before the `ref-node`
+- `(m/remove vtree)`: Remove the real node associated with the vtree from the DOM. It can be added back to the DOM using one of the above method
+- `(m/patch vtree component)`: Patch the `vtree` using `component`
+- `(m/patch vtree component props)`: Patch the `vtree` using `component`, passing the parameter `props` to `component`
+- `m/defcomp`: Define a component. Use it like `defn`, with the limitation that `defcomp` takes zero or one parameter
+- `(m/hooks component hooks-map)`: Adds [lifecycle hooks]() to `component` 
 
 ## Components
 
-Components can take zero or one parameter. Components parameters are called *props*. Components can create zero, one or multiple DOM nodes.
+Components are defined using the `muance.core/defcomp` macro. Components can take zero or one parameter. Components parameters are called *props*. 
+There is no limitation in the number of DOM nodes that a component can create. It can be zero, one or multiple nodes.
 
 ```
 ;; Creates two div nodes
@@ -50,17 +59,21 @@ Components can take zero or one parameter. Components parameters are called *pro
   (h/div))
 ```
 
-Components are stateful. The value of components local state is bound to the `muance.core/*state*` var and can be accessed in the component or one of its lifecycle hooks method.
+Components are called like functions and take a *key* as an optional first parameter. The *key* is used during [child nodes reconciliation]().
 
-Components takes a *key* as an optional first parameter. The *key* is used during [child nodes reconciliation]().
- 
 ```
-(foo key props)
+(foo key props) ;; Calls the component foo with a key and some props
 ```
+
+Components are stateful. A Component is re-rendered when one of its props or local state changes.
+The value of components local state is bound to the `muance.core/*state*` var and can be accessed in the component body or one of its lifecycle hooks method.
+
+Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers]() and some of the component [lifecycle hooks](). Mutating the atom makes the component to render again.
+
 
 ## Nodes
 
-DOM elements and svg elements are defined as macros in the `muance.h` namespace. DOM node macros are passed attributes (key/value pairs) and a body:
+HTML elements and svg elements are defined as macros in the `muance.h` namespace. The parameters of the macros defined in the `muance.h` namespace are a variable number of key/value pairs attributes and a body:
 
 ```
 (h/div 
@@ -73,7 +86,7 @@ DOM elements and svg elements are defined as macros in the `muance.h` namespace.
   (h/p))                                  ;; other nodes
 ```
 
-DOM nodes macros can only be used inside a render loop created by the `muance.core/patch` function.
+Node macros can only be used inside a render loop created by the `muance.core/patch` function.
 
 ### Attributes
 
@@ -82,42 +95,34 @@ Attributes are set as keyword/value pairs.
 The following attributes have a special meaning: 
 
 #### :class
-Sets the *class* attribute on the node. The value can be a string (a unique *class*) or a literal vector (multiple *classes*). 
+Sets the *class* attribute on the node. The value can be a string (a unique *class*), a literal vector (multiple *classes*) or nil (no *class*).
 ```
 (h/div :class [c1 c2])
 ```
 
 #### :style
 
-Sets the css styles of the node. Takes a literal map as value.
+Sets the css styles of the node. The value must be a literal map.
+
+```
+(h/div :style {:color "black"})
+```
 
 #### :muance.core/key
 
-Used during [child nodes reconciliation]().
+A string used during [child nodes reconciliation]().
 
 #### :muance.core/on
 
-Sets one or multiple event handlers on the node. Takes a literal vector (one event handler) or a collection of literal vectors (multiple event handlers).
-An event handlers must be defined as follows:
+Sets one or multiple event handlers on the node. The value must be a literal vector (one event handler), or a collection of literal vectors (multiple event handlers).
 
-```
-[event-name handler-function param1 param2 param3]
-```
-Where:
-
-
-`event-name` is a keyword which name is the event name, as used by `addEventListener`
-
-`handler-function` is the event handler function. The event handler function takes the following parameters:
- 
-
-```
-
-```
+See [event hanlders]().
 
 #### :muance.core/hooks
 
-Sets the node lifecycle hooks. See [lifecycle hooks]().
+Sets the node lifecycle hooks. The value must be a literal map.
+
+See [lifecycle hooks]().
 
 #### Removing attributes
 
@@ -126,19 +131,248 @@ Use `nil` as an attribute value when you want to unset an attribute:
  ```
  (h/div :class (when set-class? "div-class")) ;; Conditionally set the node class
  ```
+ 
+#### Custom attributes
+ 
+An muance attribute can be set as a property, or as an attribute of a DOM node. The choice between a property and an attribute is done based on the attribute name and whether it is used in an svg element or not. 
+
+If you want to force a key/value pair to be set as an attribute instead of a property, you must namespace the attribute keyword whith the `muance.attribute` namespace.
+
+```
+(h/div :muance.attribute/my-custom-attribute "foo") ;; <div my-custom-attribute="foo"></div>
+```
+
+#### Custom DOM nodes
+
+The `muance.h` namespace defines macros for several standard HTML elements.
+If you want to create an element that is not already in the `muance.h` namespace, you mst define a custom element using the `muance.core/make-element-macro` macro. `muance.core/make-element-macro` defines a new macro and as such, must be used in a Clojure file.
+
+```
+;; foo.clj
+(ns foo
+  (:require [muance.core :as m]))
+  
+
+(m/make-element-macro custom-tag) ;; Defines a "custom-tag" macro
+```
+
+```
+;; bar.cljs
+(ns bar
+  (:require [muance.core :as m])
+  (:require-macros [foo]))
+  
+
+(m/defcomp component []
+  (foo/custom-tag))
+```
 
 ### Virtual node API
+
+The following functions can be used during a patch process of the virtual DOM, to retrieve informations about a virtual node. They must be passed the current virtual node, wich is bound to the `muance.core/*vnode*` var 
+ 
+ - `(muance.core/component-name vnode)`: Returns the fully qualified name of the wrapping component, as a string. This may be useful for logging.
+ ```
+ (muance.core/component-name m/*vnode*) ;; "cljs.user/foo"
+ ```
+ - `(muance.core/dom-node vnode)`: Returns the real DOM node associated with the current virtual node. For components creating multiple nodes, this returns the DOM node of its first child. 
+ - `(muance.core/dom-nodes vnode)`: Returns an array of all the real DOM nodes associated with the current virtual node. This is only useful for components that create multiple nodes.
+  ```
+  (muance.core/dom-nodes m/*vnode*) ;; #js [#object[HTMLDivElement [object HTMLDivElement]]]
+  ```
+- `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation]().
+
 
 ### Text nodes
 
 `(muance.core/text & text)`: Creates a text node with the string concatenation of its arguments.
 
+```
+(h/p (m/text "foo " "bar")) ;; <p>foo bar</p>
+```
+
 String literals inside DOM nodes macros are implicitly converted to text nodes:
 ```
-(h/p "text-context")
+(h/p "text-context") ;; <p>text-content</p>
+```
+
+```
+;; This is NOT a string literal
+(h/p (when true "text-context")) ;; <p></p>
+```
+
+## Child nodes reconciliation
+
+### Event handlers
+
+The `:muance.core/on` [attribute]() attaches one or multiple event handlers on a node. 
+Its value must be a literal vector (one event handler) or a collection of literal vectors (multiple event handlers).
+
+An event handler is a literal vector which first element is the name of the event, as a keyword, the second element is the event handler function and other elements are parameters passed to the event handler.
+
+```
+[:click (fn [e state-ref param1 param2 param3]) "param1" "param2" "param3"]
+```
+
+- `e` is the event object
+- `state-ref` is the atom representing the local state of the node's component
+
+The event handler function can take up to three parameters, excluding the event object and the local state reference.
+
+Use a collection of event handlers to attach multiple event handlers:
+
+```
+(h/input ::m/on [[:click click-handler]
+                 [:blur blur-handler]])
+```
+
+Setting the event handler function to `nil` removes the event handler:
+
+```
+(h/div ::m/on [:click (when listen-click? click-handler)]) ;; conditionally attach a click handler
+```
+
+A component local state can be muted in an event handler:
+
+```
+(h/div ::m/on [:click (fn [e state-ref] (swap! state-ref inc))])
 ```
 
 ### Hooks
 
+The `:muance.core/hooks` [attribute]() sets a set of lifecycle hooks on a node.
 
+The `(muance.core/hooks component hooks-map)` macro sets a set of lifecycle hooks on a component. `hooks-map` mst be a literal map.
 
+All nodes and components can be set the following lifecycle hooks:
+
+##### did-mount
+
+Called after the component or node has been created and attached to the real DOM. 
+Parents `did-mount` hooks are called *before* their children's.
+
+```
+(m/h ::m/hooks {:did-mount (fn [props state-ref]))})
+```
+
+```
+(m/hooks foo-component {:did-mount (fn [props state-ref])})
+```
+
+- `props`: the props of the node's component
+- `state-ref`: the local state of the node's component (an atom) 
+
+##### will-update
+
+Called before the node or component is updated.
+
+```
+(m/h ::m/hooks {:will-update (fn [props state]))})
+```
+
+```
+(m/hooks foo-component {:will-update (fn [props state])})
+```
+
+- `props`: the props of the node's component
+- `state-ref`: the local state value of the node's component
+
+##### did-update
+
+Called after the node or component is updated.
+
+```
+(m/h ::m/hooks {:did-update (fn [props state]))})
+```
+
+```
+(m/hooks foo-component {:did-update (fn [props state])})
+```
+
+- `props`: the props of the node's component
+- `state-ref`: the local state value of the node's component
+
+##### will-unmount
+
+Called before the component or node is removed from the real DOM. 
+Parents `will-mount` hooks are called *after* their children's.
+
+```
+(m/h ::m/hooks {:will-unmount (fn [props state]))})
+```
+
+```
+(m/hooks foo-component {:will-unmount (fn [props state])})
+```
+
+- `props`: the props of the node's component
+- `state-ref`: the local state value of the node's component
+
+#### Component's lifecycle hooks
+
+The following lifecycle hooks can be set on components only:
+
+##### get-initial-state
+
+Called before the component has been created.
+The value returned by `get-initial-state` is used as the initial value of the component local sate. 
+The local state initial value is `nil` if `get-initial-state` is not defined.
+
+```
+(m/hooks foo-component {:get-initial-state (fn [props] "initial-state")})
+```
+
+- `props`: the props of the node's component
+
+##### will-receive-props
+
+Called before the node or component is updated.
+Use `will-receive-props` to update the component local state in response to props change.
+
+```
+(m/hooks foo-component {:will-receive-props (fn [prev-props props state-ref]
+                                              (reset! state-ref "state-value"))})
+```
+
+- `props`: the props of the node's component
+- `state-ref`: the local state value of the node's component
+
+### Side effectful API pitfalls
+
+The muance API is side effectful. This has the following consequences:
+
+#### Avoid lazyness
+
+All the calls to the API must be executed eagerly.
+
+```
+(h/div
+  (for [x xs]         ;; Wrong!
+    (h/p (m/text x)))
+```
+
+```
+(h/div
+  (doseq [x xs]       ;; Right
+    (h/p (m/text x)))
+```
+
+#### Wrap child nodes parameters into functions
+ 
+Function parameters are evaluated before being passed to the function.
+
+```
+(defn foo [child]
+  (h/div child))
+  
+
+(foo (h/p)) ;; Wrong !
+```
+
+```
+(defn foo [child]
+  (h/div (child)))
+  
+
+(foo #(h/p)) ;; Right
+```
