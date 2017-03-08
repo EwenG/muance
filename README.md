@@ -39,9 +39,9 @@ See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/
 ## Top level API
 
 - `(muance.core/vtree)`: Creates a new vtree
-- `(m/append-child vtree parent-node)`: Append the real node associated with the `vtree` to the children of the `parent-node`
-- `(m/insert-before vtree ref-node)`: Insert the real node associated with the `vtree` before the `ref-node`
-- `(m/remove vtree)`: Remove the real node associated with the vtree from the DOM. It can be added back to the DOM using one of the above method
+- `(m/append-child vtree parent-node)`: Append the DOM node associated with the `vtree` to the children of the `parent-node`
+- `(m/insert-before vtree ref-node)`: Insert the DOM node associated with the `vtree` before the `ref-node`
+- `(m/remove vtree)`: Remove the DOM node associated with the vtree from the DOM. It can be added back to the DOM using one of the above method
 - `(m/patch vtree component)`: Patch the `vtree` using `component`
 - `(m/patch vtree component props)`: Patch the `vtree` using `component`, passing the parameter `props` to `component`
 - `m/defcomp`: Define a component. Use it like `defn`, with the limitation that `defcomp` takes zero or one parameter
@@ -66,31 +66,31 @@ Components are called like functions and take a *key* as an optional first param
 ```
 
 Components are stateful. A Component is re-rendered when one of its props or local state changes.
-The value of components local state is bound to the `muance.core/*state*` var and can be accessed in the component body or one of its lifecycle hooks method.
+The value of components local state is bound to the `muance.core/*state*` var and can be used in the component body or one of its [lifecycle hooks]() methods.
 
-Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers]() and some of the component [lifecycle hooks](). Mutating the atom makes the component to render again.
+Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers]() and several of the component [lifecycle hooks](). Changing the value of the atom marks the component to be render again.
 
 
 ## Nodes
 
-HTML elements and svg elements are defined as macros in the `muance.h` namespace. The parameters of the macros defined in the `muance.h` namespace are a variable number of key/value pairs attributes and a body:
+HTML elements and svg elements are defined as macros in the `muance.h` namespace. Their parameters are a variable number of key/value pairs attributes and a body:
 
 ```
 (h/div 
   :class "div-class"                      ;; a class attribute
   :style {:color "black"}                 ;; css styles
-  :muance.core/key "div-key"              ;; the key is used during child nodes reconciliation
+  :muance.core/key "div-key"              ;; the key used during child nodes reconciliation
   :muance.core/on [:click click-handler]  ;; an event handler
   :muance.core/hooks {:did-mount (fn [])} ;; lifecycle hooks
   (h/p)                                   
   (h/p))                                  ;; other nodes
 ```
 
-Node macros can only be used inside a render loop created by the `muance.core/patch` function.
+Node macros can only be used inside a render pass started by the `muance.core/patch` function.
 
 ### Attributes
 
-Attributes are set as keyword/value pairs. 
+Attributes are a set of keyword/value pairs. 
 
 The following attributes have a special meaning: 
 
@@ -126,7 +126,7 @@ See [lifecycle hooks]().
 
 #### Removing attributes
 
-Use `nil` as an attribute value when you want to unset an attribute:
+Use the `nil` value to unset an attribute:
  
  ```
  (h/div :class (when set-class? "div-class")) ;; Conditionally set the node class
@@ -134,9 +134,10 @@ Use `nil` as an attribute value when you want to unset an attribute:
  
 #### Custom attributes
  
-An muance attribute can be set as a property, or as an attribute of a DOM node. The choice between a property and an attribute is done based on the attribute name and whether it is used in an svg element or not. 
+Muance attributes are set either as properties, or as attributes of DOM nodes.
+The choice between a property and an attribute is automatically made by Muance based on the attribute name and whether it is used in an svg element or not. 
 
-If you want to force a key/value pair to be set as an attribute instead of a property, you must namespace the attribute keyword whith the `muance.attribute` namespace.
+If you want to force a key/value pair to be set as an attribute instead of a property, you must namespace the attribute keyword with the `muance.attribute` namespace.
 
 ```
 (h/div :muance.attribute/my-custom-attribute "foo") ;; <div my-custom-attribute="foo"></div>
@@ -145,42 +146,47 @@ If you want to force a key/value pair to be set as an attribute instead of a pro
 #### Custom DOM nodes
 
 The `muance.h` namespace defines macros for several standard HTML elements.
-If you want to create an element that is not already in the `muance.h` namespace, you mst define a custom element using the `muance.core/make-element-macro` macro. `muance.core/make-element-macro` defines a new macro and as such, must be used in a Clojure file.
+If you want to create an element that is not already in the `muance.h` namespace, you must define a custom element using the `muance.core/make-element-macro` macro. `muance.core/make-element-macro` defines a new macro and as such, must be used in a Clojure file.
 
 ```
 ;; foo.clj
+
 (ns foo
   (:require [muance.core :as m]))
-  
 
 (m/make-element-macro custom-tag) ;; Defines a "custom-tag" macro
 ```
 
 ```
 ;; bar.cljs
+
 (ns bar
   (:require [muance.core :as m])
   (:require-macros [foo]))
-  
 
 (m/defcomp component []
-  (foo/custom-tag))
+  (foo/custom-tag)) ;; <custom-tag></custom-tag>
 ```
 
 ### Virtual node API
 
-The following functions can be used during a patch process of the virtual DOM, to retrieve informations about a virtual node. They must be passed the current virtual node, wich is bound to the `muance.core/*vnode*` var 
+The following functions can be used during a patching pass on the virtual DOM, in order to retrieve informations about a virtual node.
+They expect the current virtual node, which is bound to the `muance.core/*vnode*` var.
  
- - `(muance.core/component-name vnode)`: Returns the fully qualified name of the wrapping component, as a string. This may be useful for logging.
+ - `(muance.core/component-name vnode)`: Returns the fully qualified name of the node's component, as a string. This may be useful for logging.
+ 
  ```
  (muance.core/component-name m/*vnode*) ;; "cljs.user/foo"
  ```
- - `(muance.core/dom-node vnode)`: Returns the real DOM node associated with the current virtual node. For components creating multiple nodes, this returns the DOM node of its first child. 
- - `(muance.core/dom-nodes vnode)`: Returns an array of all the real DOM nodes associated with the current virtual node. This is only useful for components that create multiple nodes.
+ 
+ - `(muance.core/dom-node vnode)`: Returns the DOM node associated with the current virtual node. For components creating multiple nodes, this returns the DOM node of its first child. 
+ - `(muance.core/dom-nodes vnode)`: Returns an array of all the DOM nodes associated with the current virtual node. This is only useful for components that create multiple nodes.
+  
   ```
   (muance.core/dom-nodes m/*vnode*) ;; #js [#object[HTMLDivElement [object HTMLDivElement]]]
   ```
-- `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation]().
+  
+ - `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation]().
 
 
 ### Text nodes
@@ -232,7 +238,7 @@ Setting the event handler function to `nil` removes the event handler:
 (h/div ::m/on [:click (when listen-click? click-handler)]) ;; conditionally attach a click handler
 ```
 
-A component local state can be muted in an event handler:
+A component's local state value can be modified in an event handler:
 
 ```
 (h/div ::m/on [:click (fn [e state-ref] (swap! state-ref inc))])
@@ -244,11 +250,11 @@ The `:muance.core/hooks` [attribute]() sets a set of lifecycle hooks on a node.
 
 The `(muance.core/hooks component hooks-map)` macro sets a set of lifecycle hooks on a component. `hooks-map` mst be a literal map.
 
-All nodes and components can be set the following lifecycle hooks:
+All nodes and components support the following lifecycle hooks:
 
 ##### did-mount
 
-Called after the component or node has been created and attached to the real DOM. 
+Called after the component or node has been created and attached to the DOM. 
 Parents `did-mount` hooks are called *before* their children's.
 
 ```
@@ -294,7 +300,7 @@ Called after the node or component is updated.
 
 ##### will-unmount
 
-Called before the component or node is removed from the real DOM. 
+Called before the component or node is removed from the DOM. 
 Parents `will-mount` hooks are called *after* their children's.
 
 ```
@@ -308,14 +314,14 @@ Parents `will-mount` hooks are called *after* their children's.
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
 
-#### Component's lifecycle hooks
+#### Components lifecycle hooks
 
 The following lifecycle hooks can be set on components only:
 
 ##### get-initial-state
 
 Called before the component has been created.
-The value returned by `get-initial-state` is used as the initial value of the component local sate. 
+The value returned by `get-initial-state` is used as the initial value of the component's local sate. 
 The local state initial value is `nil` if `get-initial-state` is not defined.
 
 ```
@@ -327,7 +333,7 @@ The local state initial value is `nil` if `get-initial-state` is not defined.
 ##### will-receive-props
 
 Called before the node or component is updated.
-Use `will-receive-props` to update the component local state in response to props change.
+Use `will-receive-props` to update the component's local state in response to props change.
 
 ```
 (m/hooks foo-component {:will-receive-props (fn [prev-props props state-ref]
@@ -359,12 +365,11 @@ All the calls to the API must be executed eagerly.
 
 #### Wrap child nodes parameters into functions
  
-Function parameters are evaluated before being passed to the function.
+Function parameters are evaluated before being passed to functions.
 
 ```
 (defn foo [child]
   (h/div child))
-  
 
 (foo (h/p)) ;; Wrong !
 ```
@@ -372,7 +377,6 @@ Function parameters are evaluated before being passed to the function.
 ```
 (defn foo [child]
   (h/div (child)))
-  
 
 (foo #(h/p)) ;; Right
 ```
