@@ -306,7 +306,7 @@ A component's local state value can be modified in an event handler:
 (h/div ::m/on [:click (fn [e state-ref] (swap! state-ref inc))])
 ```
 
-## Hooks
+## Lifecycle hooks
 
 The `:muance.core/hooks` [attribute](#attributes) sets a set of lifecycle hooks on a node.
 
