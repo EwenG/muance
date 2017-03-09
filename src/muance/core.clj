@@ -11,7 +11,7 @@
   (if (= t 9007199254740991) 1 (inc t)))
 
 (defn dec-comp-typeid [t]
-  ;; MAX_SAFE_INTEGER
+  ;; MIN_SAFE_INTEGER
   (if (= t -9007199254740991) -1 (dec t)))
 
 (defn safe-symbol [x]
