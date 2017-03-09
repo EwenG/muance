@@ -68,7 +68,7 @@ Components are called like functions and take a *key* as an optional first param
 Components are stateful. A Component is re-rendered when one of its props or local state changes.
 The value of components local state is bound to the `muance.core/*state*` var and can be used in the component body or one of its [lifecycle hooks]() methods.
 
-Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers]() and several of the component [lifecycle hooks](). Changing the value of the atom marks the component to be render again.
+Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers]() and several of the component [lifecycle hooks](). Changing the value of the atom marks the component as needed to be re-rendered.
 
 
 ## Nodes
@@ -86,13 +86,13 @@ HTML elements and svg elements are defined as macros in the `muance.h` namespace
   (h/p))                                  ;; other nodes
 ```
 
-Node macros can only be used inside a render pass started by the `muance.core/patch` function.
+Node macros can only be used during a render pass started by the `muance.core/patch` function.
 
 ### Attributes
 
 Attributes are a set of keyword/value pairs. 
 
-The following attributes have a special meaning: 
+The following attributes have special meaning: 
 
 #### :class
 Sets the *class* attribute on the node. The value can be a string (a unique *class*), a literal vector (multiple *classes*) or nil (no *class*).
@@ -170,9 +170,8 @@ If you want to create an element that is not already in the `muance.h` namespace
 
 ### Virtual node API
 
-The following functions can be used during a patching pass on the virtual DOM, in order to retrieve informations about a virtual node.
-They expect the current virtual node, which is bound to the `muance.core/*vnode*` var.
- 
+The following functions can be used to retrieve informations about a virtual node. 
+They expect the current virtual node, which is bound to the `muance.core/*vnode*` var when patching the virtual DOM.
  - `(muance.core/component-name vnode)`: Returns the fully qualified name of the node's component, as a string. This may be useful for logging.
  
  ```
@@ -209,12 +208,13 @@ String literals inside DOM nodes macros are implicitly converted to text nodes:
 
 ## Child nodes reconciliation
 
-### Event handlers
+## Event handlers
 
 The `:muance.core/on` [attribute]() attaches one or multiple event handlers on a node. 
 Its value must be a literal vector (one event handler) or a collection of literal vectors (multiple event handlers).
 
-An event handler is a literal vector which first element is the name of the event, as a keyword, the second element is the event handler function and other elements are parameters passed to the event handler.
+An event handler is a literal vector which first element is the name of the event, as a keyword, and second element the event handler function.
+The other vector elements are additional parameters passed to the event handler.
 
 ```
 [:click (fn [e state-ref param1 param2 param3]) "param1" "param2" "param3"]
@@ -223,7 +223,7 @@ An event handler is a literal vector which first element is the name of the even
 - `e` is the event object
 - `state-ref` is the atom representing the local state of the node's component
 
-The event handler function can take up to three parameters, excluding the event object and the local state reference.
+The event handler function can take up to three parameters, in addition to the event object and the local state reference.
 
 Use a collection of event handlers to attach multiple event handlers:
 
@@ -244,15 +244,15 @@ A component's local state value can be modified in an event handler:
 (h/div ::m/on [:click (fn [e state-ref] (swap! state-ref inc))])
 ```
 
-### Hooks
+## Hooks
 
 The `:muance.core/hooks` [attribute]() sets a set of lifecycle hooks on a node.
 
-The `(muance.core/hooks component hooks-map)` macro sets a set of lifecycle hooks on a component. `hooks-map` mst be a literal map.
+The `(muance.core/hooks component hooks-map)` macro sets a set of lifecycle hooks on a component. `hooks-map` must be a literal map.
 
 All nodes and components support the following lifecycle hooks:
 
-##### did-mount
+#### did-mount
 
 Called after the component or node has been created and attached to the DOM. 
 Parents `did-mount` hooks are called *before* their children's.
@@ -268,7 +268,7 @@ Parents `did-mount` hooks are called *before* their children's.
 - `props`: the props of the node's component
 - `state-ref`: the local state of the node's component (an atom) 
 
-##### will-update
+#### will-update
 
 Called before the node or component is updated.
 
@@ -283,7 +283,7 @@ Called before the node or component is updated.
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
 
-##### did-update
+#### did-update
 
 Called after the node or component is updated.
 
@@ -298,7 +298,7 @@ Called after the node or component is updated.
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
 
-##### will-unmount
+#### will-unmount
 
 Called before the component or node is removed from the DOM. 
 Parents `will-mount` hooks are called *after* their children's.
@@ -314,11 +314,11 @@ Parents `will-mount` hooks are called *after* their children's.
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
 
-#### Components lifecycle hooks
+### Components lifecycle hooks
 
 The following lifecycle hooks can be set on components only:
 
-##### get-initial-state
+#### get-initial-state
 
 Called before the component has been created.
 The value returned by `get-initial-state` is used as the initial value of the component's local sate. 
@@ -330,7 +330,7 @@ The local state initial value is `nil` if `get-initial-state` is not defined.
 
 - `props`: the props of the node's component
 
-##### will-receive-props
+#### will-receive-props
 
 Called before the node or component is updated.
 Use `will-receive-props` to update the component's local state in response to props change.
@@ -343,11 +343,11 @@ Use `will-receive-props` to update the component's local state in response to pr
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
 
-### Side effectful API pitfalls
+## Side effectful API pitfalls
 
 The muance API is side effectful. This has the following consequences:
 
-#### Avoid lazyness
+### Avoid lazyness
 
 All the calls to the API must be executed eagerly.
 
@@ -363,7 +363,7 @@ All the calls to the API must be executed eagerly.
     (h/p (m/text x)))
 ```
 
-#### Wrap child nodes parameters into functions
+### Wrap child nodes parameters into functions
  
 Function parameters are evaluated before being passed to functions.
 
