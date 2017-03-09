@@ -116,8 +116,6 @@
                     (str "duplicate attributes: " (pr-str attrs-keys)))))))
     (into {} (map vec attrs))))
 
-(attributes '(::key 1))
-
 (defn handler? [h]
   (and (vector? h) (keyword? (first h))))
 
