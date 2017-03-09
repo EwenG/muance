@@ -10,7 +10,8 @@ A virtual dom library for Clojurescript.
 - Svg support
 - Asynchronous rendering by default
 
-Muance exposes a side effectful API which mutates an in memory representation of a virtual dom. 
+Muance exposes a side effectful API which mutates an in memory representation of a virtual DOM.
+Muance does not recreate a new virtual DOM on every render, which may reduce the pressure on the garbage collector.
 
 ## Quick start
 
@@ -207,6 +208,67 @@ String literals inside DOM nodes macros are implicitly converted to text nodes:
 ```
 
 ## Child nodes reconciliation
+
+When reordering a set of child nodes, Muance destroys the nodes and recreates them at their new position.
+Recreating nodes has the following consequences:
+ 
+ - The local state of reordered components is lost
+ - The state of the reordered DOM nodes (focus state, scroll position ...) may be lost
+ - Performance may suffer
+ 
+Recreating child nodes can be avoided by providing them a special *key* parameter.
+The *key* is used by Muance to match child nodes identity between render pass.
+
+The *key* parameter can be set on nodes using the `:muance.core/key` attribute:
+ 
+```
+(h/div :muance.core/key "some-key")
+```
+ 
+The *key* parameter can be set on components using an optional first parameter:
+  
+```
+(foo-component "some-key" props)
+```
+
+Child nodes reconciliation only works amongs nodes that share the same parent.
+
+Duplicate keys are forbidden. Muance prints an error message when duplicate keys are detected:
+
+```
+(h/div
+  (h/p ::m/key "1")
+  (h/p ::m/key "1")) ;; prints: "Duplicate key: 1 in component cljs.user/foo"
+```
+
+Child nodes reconciliation will not work in the following situations, even if keys are provided:
+
+- A *key* cannot be set on two components of different types
+- A *key* cannot be set on two nodes that do not share the same definition
+
+To illustrate the second point:
+
+```
+(h/div
+  (if x
+    (do (h/p ::m/key "1") (h/p ::m/key "2"))
+    (do (h/p ::m/key "2") (h/p ::m/key "1"))) ;; Child nodes reconciliation does not apply
+```
+
+```
+(let [child (fn [k] (h/p ::m/key k))]
+  (h/div
+    (if x
+      (do (child "1") (child "2"))
+      (do (child "2") (child "1")))) ;; Child nodes reconciliation applies
+```
+
+Child nodes reconciliation is often used with `doseq` loops:
+
+```
+(doseq [k node-keys]
+  (h/p ::m/key k))
+```
 
 ## Event handlers
 
