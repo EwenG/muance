@@ -407,7 +407,7 @@ Use `will-receive-props` to update the component's local state in response to pr
 
 ## Side effectful API pitfalls
 
-The muance API is side effectful. This has the following consequences:
+The muance API is side effectful. Watch out for potential issues:
 
 ### Avoid lazyness
 
