@@ -46,7 +46,7 @@ See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/
 - `(m/patch vtree component)`: Patch the `vtree` using `component`
 - `(m/patch vtree component props)`: Patch the `vtree` using `component`, passing the parameter `props` to `component`
 - `m/defcomp`: Define a component. Use it like `defn`, with the limitation that `defcomp` takes zero or one parameter
-- `(m/hooks component hooks-map)`: Adds [lifecycle hooks]() to `component` 
+- `(m/hooks component hooks-map)`: Adds [lifecycle hooks](#lifecycle-hooks) to `component` 
 
 ## Components
 
@@ -60,16 +60,16 @@ There is no limitation in the number of DOM nodes that a component can create. I
   (h/div))
 ```
 
-Components are called like functions and take a *key* as an optional first parameter. The *key* is used during [child nodes reconciliation]().
+Components are called like functions and take a *key* as an optional first parameter. The *key* is used during [child nodes reconciliation](#child-nodes-reconciliation).
 
 ```
 (foo key props) ;; Calls the component foo with a key and some props
 ```
 
 Components are stateful. A Component is re-rendered when one of its props or local state changes.
-The value of components local state is bound to the `muance.core/*state*` var and can be used in the component body or one of its [lifecycle hooks]() methods.
+The value of components local state is bound to the `muance.core/*state*` var and can be used in the component body or one of its [lifecycle hooks](#lifecycle-hooks) methods.
 
-Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers]() and several of the component [lifecycle hooks](). Changing the value of the atom marks the component as needed to be re-rendered.
+Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers](#event-handlers) and several of the component [lifecycle hooks](#lifecycle-hooks). Changing the value of the atom marks the component as needed to be re-rendered.
 
 
 ## Nodes
@@ -111,19 +111,19 @@ Sets the css styles of the node. The value must be a literal map.
 
 #### :muance.core/key
 
-A string used during [child nodes reconciliation]().
+A string used during [child nodes reconciliation](#child-nodes-reconciliation).
 
 #### :muance.core/on
 
 Sets one or multiple event handlers on the node. The value must be a literal vector (one event handler), or a collection of literal vectors (multiple event handlers).
 
-See [event hanlders]().
+See [event hanlders](#event-handlers).
 
 #### :muance.core/hooks
 
 Sets the node lifecycle hooks. The value must be a literal map.
 
-See [lifecycle hooks]().
+See [lifecycle hooks](#lifecycle-hooks).
 
 #### Removing attributes
 
@@ -186,7 +186,7 @@ They expect the current virtual node, which is bound to the `muance.core/*vnode*
   (muance.core/dom-nodes m/*vnode*) ;; #js [#object[HTMLDivElement [object HTMLDivElement]]]
   ```
   
- - `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation]().
+ - `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation](#child-nodes-reconciliation).
 
 
 ### Text nodes
@@ -272,7 +272,7 @@ Child nodes reconciliation is often used with `doseq` loops:
 
 ## Event handlers
 
-The `:muance.core/on` [attribute]() attaches one or multiple event handlers on a node. 
+The `:muance.core/on` [attribute](#attributes) attaches one or multiple event handlers on a node. 
 Its value must be a literal vector (one event handler) or a collection of literal vectors (multiple event handlers).
 
 An event handler is a literal vector which first element is the name of the event, as a keyword, and second element the event handler function.
@@ -308,7 +308,7 @@ A component's local state value can be modified in an event handler:
 
 ## Hooks
 
-The `:muance.core/hooks` [attribute]() sets a set of lifecycle hooks on a node.
+The `:muance.core/hooks` [attribute](#attributes) sets a set of lifecycle hooks on a node.
 
 The `(muance.core/hooks component hooks-map)` macro sets a set of lifecycle hooks on a component. `hooks-map` must be a literal map.
 
