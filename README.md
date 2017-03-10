@@ -13,6 +13,8 @@ A virtual dom library for Clojurescript.
 Muance exposes a side effectful API which mutates an in memory representation of a virtual DOM.
 Muance does not recreate a new virtual DOM on every render, which may reduce the pressure on the garbage collector.
 
+Muance size is around 8k when minified, before gzip.
+
 ## Quick start
 
 The following code snippet creates a component and renders it on the page:
