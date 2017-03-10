@@ -15,12 +15,11 @@
 (defn root []
   (.getElementById js/document "root"))
 
-(def vnode-keys [:typeid :parent :node :component :chidren-count :children :attrs-count
+(def vnode-keys [:typeid :parent :node :component :chidren-count :children
                  :attrs :unmount :key :key-moved :keymap :keymap-invalid])
-(def comp-keys (-> vnode-keys (assoc 2 :comp-data)
-                   (assoc 3 :props) (assoc 6 :state) (assoc 7 :state-ref)))
+(def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 3 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
-(def comp-data-keys [:component-name :svg-namespace :index-in-parent
+(def comp-data-keys [:component-name :state-ref :svg-namespace :index-in-parent
                      :component-depth :dirty-flag])
 
 (deftype Parent [typeid])
@@ -68,7 +67,9 @@
                           (when-let [keymap (aget vnode m/index-keymap)]
                             (into #{} (o/getKeys keymap)))
                           (and (m/component? vnode) (= i m/index-comp-data))
-                          (format-comp-data (aget vnode i))
+                          (do
+                            (prn (nil? (aget vnode i)))
+                            (format-comp-data (aget vnode i)))
                           :else (aget vnode i))]
             (recur (assoc! m (get vnode-keys i) val)
                    (inc i)))

@@ -158,9 +158,9 @@
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
   (m/patch @vtree attrs-c
-                {:class1 67 :dyn-attr "val2" :bg-cond true :color "green"
-                 :input-value "tt6"
-                 :for-val "rr2"
+                {:class1 67 :dyn-attr "val3" :bg-cond true :color "green"
+                 :input-value "tt7"
+                 :for-val "rr1"
                  :checkbox-value nil :checkbox-checked "e"
                  :selected false})
   )

@@ -8,13 +8,12 @@
 (def ^{:private true} index-component 3)
 (def ^{:private true} index-children-count 4)
 (def ^{:private true} index-children 5)
-(def ^{:private true} index-attrs-count 6)
-(def ^{:private true} index-attrs 7)
-(def ^{:private true} index-unmount 8)
-(def ^{:private true} index-key 9)
-(def ^{:private true} index-key-moved 10)
-(def ^{:private true} index-keymap 11)
-(def ^{:private true} index-keymap-invalid 12)
+(def ^{:private true} index-attrs 6)
+(def ^{:private true} index-unmount 7)
+(def ^{:private true} index-key 8)
+(def ^{:private true} index-key-moved 9)
+(def ^{:private true} index-keymap 10)
+(def ^{:private true} index-keymap-invalid 11)
 
 (def ^{:private true} index-text 3)
 
@@ -22,19 +21,20 @@
 (def ^{:private true} index-comp-data 2)
 (def ^{:private true} index-comp-props 3)
 (def ^{:private true} index-comp-state 6)
-(def ^{:private true} index-comp-state-ref 7)
 
 (def ^{:private true} index-comp-data-name 0)
-(def ^{:private true} index-comp-data-svg-namespace 1)
-(def ^{:private true} index-comp-data-index-in-parent 2)
-(def ^{:private true} index-comp-data-depth 3)
-(def ^{:private true} index-comp-data-dirty-flag 4)
+(def ^{:private true} index-comp-data-state-ref 1)
+(def ^{:private true} index-comp-data-svg-namespace 2)
+(def ^{:private true} index-comp-data-index-in-parent 3)
+(def ^{:private true} index-comp-data-depth 4)
+(def ^{:private true} index-comp-data-dirty-flag 5)
 
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
 
 (def ^{:dynamic true :private true} *component* nil)
 ;; Whether the current vnode has just been created or not
 (def ^{:dynamic true :private true} *new-node* nil)
+(def ^{:dynamic true :private true} *attrs-count* nil)
 ;; Set to the value of the moved node when a moved node is met, unless if was already set before
 ;; Thus it keeps the value of the higher moved node in the tree, even if child nodes are
 ;; themselves moved. This is necessary to know when to unset the value 
@@ -152,7 +152,7 @@
 
 (defn- enqueue-unmounts [vnode]
   (when (component? vnode)
-    (remove-watch (aget vnode index-comp-state-ref) ::component))
+    (remove-watch (aget vnode index-comp-data index-comp-data-state-ref) ::component))
   (when (aget vnode index-unmount)
       (aset *components-queue* *components-queue-count* vnode)
       (set! *components-queue-count* (inc *components-queue-count*)))
@@ -240,7 +240,7 @@
 (defn- new-vnode-key [typeid element keymap key]
   (let [keymap (if (nil? keymap) (init-keymap #js {}) keymap)
         vnode #js [typeid *vnode* element
-                   nil nil nil nil nil nil key moved-flag]]
+                   nil nil nil nil nil key moved-flag]]
     (o/set keymap key vnode)
     vnode))
 
@@ -418,11 +418,10 @@
         (when will-update (will-update *props* *state*))
         (when (aget *vnode* index-children-count)
           (aset *vnode* index-children-count 0))
-        (when (aget *vnode* index-attrs-count)
-          (aset *vnode* index-attrs-count 0))
         (clean-keymap *vnode*))))
   (when (not= (aget *vnode* index-unmount) will-unmount)
-    (aset *vnode* index-unmount will-unmount)))
+    (aset *vnode* index-unmount will-unmount))
+  (set! *attrs-count* 0))
 
 (defn- close-impl [did-mount did-update]
   (clean-children *vnode*)
@@ -490,8 +489,7 @@
         (add-watch state-ref ::component on-state-change)
         (aset *vnode* index-comp-props (if props? *props* no-props-flag))
         (aset *vnode* index-comp-data
-              #js[component-name *svg-namespace* vnode-index *component-depth*])
-        (aset *vnode* index-comp-state-ref state-ref)
+              #js[component-name state-ref *svg-namespace* vnode-index *component-depth*])
         ;; call will-unmount at the end to keep things consistent in case of an exception
         ;; in will-unmount
         (when prev
@@ -511,7 +509,7 @@
               (aset *vnode* index-comp-state nil))))
       (let [prev-props (comp-props *vnode*)
             prev-state (aget *vnode* index-comp-state)
-            state-ref (aget *vnode* index-comp-state-ref)
+            state-ref (aget *vnode* index-comp-data index-comp-data-state-ref)
             state @state-ref
             comp-data (aget *vnode* index-comp-data)]
         (aset *vnode* index-comp-props (if props? *props* no-props-flag))
@@ -552,15 +550,14 @@
   (set! *skip* false))
 
 (defn- attr-impl [ns key val set-fn]
-  (let [attrs-index (or (aget *vnode* index-attrs-count) 0)
-        prev-attrs (or (aget *vnode* index-attrs) #js [])
-        prev-val (aget prev-attrs attrs-index)
+  (let [prev-attrs (or (aget *vnode* index-attrs) #js [])
+        prev-val (aget prev-attrs *attrs-count*)
         prev-node (aget *vnode* index-node)]
-    (when (nil? (aget *vnode* index-attrs))
-      (aset *vnode* index-attrs prev-attrs))
-    (aset *vnode* index-attrs-count (inc attrs-index))
+    (when (nil? (aget *vnode* *attrs-count*))
+      (aset *vnode* *attrs-count* prev-attrs))
+    (set! *attrs-count* (inc *attrs-count*))
     (when (not= prev-val val)
-      (aset prev-attrs attrs-index val)
+      (aset prev-attrs *attrs-count* val)
       (set-fn prev-node ns key val))))
 
 (defn- handle-event-handlers [attrs attrs-index key handler f]
@@ -573,37 +570,36 @@
     (aset attrs (inc attrs-index) f)))
 
 (defn- on-impl [key f param1 param2 param3 param-count]
-  (let [attrs-index (or (aget *vnode* index-attrs-count) 0)
-        prev-attrs (or (aget *vnode* index-attrs) #js [])
-        prev-f (aget prev-attrs (inc attrs-index))
-        state-ref (aget *component* index-comp-state-ref)]
+  (let [prev-attrs (or (aget *vnode* index-attrs) #js [])
+        prev-f (aget prev-attrs (inc *attrs-count*))
+        state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
     (when (nil? (aget *vnode* index-attrs))
       (aset *vnode* index-attrs prev-attrs))
-    (aset *vnode* index-attrs-count (+ attrs-index 2 param-count))
+    (set! *attrs-count* (+ *attrs-count* 2))
     (cond (and (= 0 param-count) (not= prev-f f))
           (let [handler (when (fn? f) (fn [e] (f e state-ref)))]
-            (handle-event-handlers prev-attrs attrs-index key handler f))
+            (handle-event-handlers prev-attrs *attrs-count* key handler f))
           (and (= 1 param-count) (or (not= prev-f f)
-                                     (not= param1 (aget prev-attrs (+ attrs-index 2)))))
+                                     (not= param1 (aget prev-attrs (+ *attrs-count* 2)))))
           (let [handler (when (fn? f) (fn [e] (f e state-ref param1)))]
-            (handle-event-handlers prev-attrs attrs-index key handler f)
-            (aset prev-attrs (+ attrs-index 2) param1))
+            (handle-event-handlers prev-attrs *attrs-count* key handler f)
+            (aset prev-attrs (+ *attrs-count* 2) param1))
           (and (= 2 param-count) (or (not= prev-f f)
-                                     (not= param1 (aget prev-attrs (+ attrs-index 2)))
-                                     (not= param2 (aget prev-attrs (+ attrs-index 3)))))
+                                     (not= param1 (aget prev-attrs (+ *attrs-count* 2)))
+                                     (not= param2 (aget prev-attrs (+ *attrs-count* 3)))))
           (let [handler (when (fn? f) (fn [e] (f e state-ref param1 param2)))]
-            (handle-event-handlers prev-attrs attrs-index key handler f)
-            (aset prev-attrs (+ attrs-index 2) param1)
-            (aset prev-attrs (+ attrs-index 3) param2))
+            (handle-event-handlers prev-attrs *attrs-count* key handler f)
+            (aset prev-attrs (+ *attrs-count* 2) param1)
+            (aset prev-attrs (+ *attrs-count* 3) param2))
           (and (= 3 param-count) (or (not= prev-f f)
-                                     (not= param1 (aget prev-attrs (+ attrs-index 2)))
-                                     (not= param2 (aget prev-attrs (+ attrs-index 3)))
-                                     (not= param3 (aget prev-attrs (+ attrs-index 4)))))
+                                     (not= param1 (aget prev-attrs (+ *attrs-count* 2)))
+                                     (not= param2 (aget prev-attrs (+ *attrs-count* 3)))
+                                     (not= param3 (aget prev-attrs (+ *attrs-count* 4)))))
           (let [handler (when (fn? f) (fn [e] (f e state-ref param1 param2 param3)))]
-            (handle-event-handlers prev-attrs attrs-index key handler f)
-            (aset prev-attrs (+ attrs-index 2) param1)
-            (aset prev-attrs (+ attrs-index 3) param2)
-            (aset prev-attrs (+ attrs-index 4) param3)))))
+            (handle-event-handlers prev-attrs *attrs-count* key handler f)
+            (aset prev-attrs (+ *attrs-count* 2) param1)
+            (aset prev-attrs (+ *attrs-count* 3) param2)
+            (aset prev-attrs (+ *attrs-count* 4) param3)))))
 
 (defn- on [key f]
   (on-impl key f nil nil nil 0))
@@ -611,7 +607,7 @@
 (defn- on-static [key f]
   (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *vnode* index-node)
-          state-ref (aget *component* index-comp-state-ref)]
+          state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref)) false))))
 
 (defn- on1 [key f attr1]
@@ -620,7 +616,7 @@
 (defn- on-static1 [key f attr1]
   (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *vnode* index-node)
-          state-ref (aget *component* index-comp-state-ref)]
+          state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref attr1)) false))))
 
 (defn- on2 [key f attr1 attr2]
@@ -629,7 +625,7 @@
 (defn- on-static2 [key f attr1 attr2]
   (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *vnode* index-node)
-          state-ref (aget *component* index-comp-state-ref)]
+          state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref attr1 attr2)) false))))
 
 (defn- on3 [key f attr1 attr2 attr3]
@@ -638,7 +634,7 @@
 (defn- on-static3 [key f attr1 attr2 attr3]
   (when (and (> *new-node* 0) (fn? f))
     (let [node (aget *vnode* index-node)
-          state-ref (aget *component* index-comp-state-ref)]
+          state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
       (.addEventListener node key (fn [e] (f e state-ref attr1 attr2 attr3)) false))))
 
 (defn- attr-ns [ns key val]
@@ -685,7 +681,7 @@
     (let [vnode (aget *components-queue* i)
           component (if (component? vnode) vnode (aget vnode index-component))
           props (aget component index-comp-props)
-          state-ref (aget component index-comp-state-ref)]
+          state-ref (aget component index-comp-data index-comp-data-state-ref)]
       (set! *vnode* vnode)
       ((aget *components-queue* (dec i)) props state-ref))
     (recur (- i 2))))
@@ -700,6 +696,7 @@
   (binding [*vnode* parent-vnode
             *component* nil
             *new-node* 0
+            *attrs-count* 0
             *props* nil
             *state* nil
             *moved-vnode* nil
