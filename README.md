@@ -117,7 +117,7 @@ A string used during [child nodes reconciliation](#child-nodes-reconciliation).
 
 Sets one or multiple event handlers on the node. The value must be a literal vector (one event handler), or a collection of literal vectors (multiple event handlers).
 
-See [event hanlders](#event-handlers).
+See [event handlers](#event-handlers).
 
 #### :muance.core/hooks
 
@@ -425,7 +425,7 @@ All the calls to the API must be executed eagerly.
     (h/p (m/text x)))
 ```
 
-### Wrap child nodes parameters into functions
+### Wrap child nodes parameters inside functions
  
 Function parameters are evaluated before being passed to functions.
 
