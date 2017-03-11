@@ -9,10 +9,18 @@
 (def ^{:private true} index-children-count 4)
 (def ^{:private true} index-children 5)
 (def ^{:private true} index-attrs 6)
+;; Unmount is stored on the node since it must be called when one of the parents of the node
+;; is removed
 (def ^{:private true} index-unmount 7)
 (def ^{:private true} index-key 8)
+;; A slot which stores one of two flags:
+;; - moved-flag
+;; - moving-flag
+;; See the documentation for these two flags for more details
 (def ^{:private true} index-key-moved 9)
 (def ^{:private true} index-keymap 10)
+;; When a keyed node is removed, the keymap is marked as invalid. Invalid keymaps are
+;; cleaned when the close function of the node is called
 (def ^{:private true} index-keymap-invalid 11)
 
 (def ^{:private true} index-text 3)
@@ -25,13 +33,18 @@
 (def ^{:private true} index-comp-data-name 0)
 (def ^{:private true} index-comp-data-state-ref 1)
 (def ^{:private true} index-comp-data-svg-namespace 2)
+;; index-in-parent is used when rendering a component after its local state has changed.
+;; we must initialize the children-count slot to the same value than index-in-parent
 (def ^{:private true} index-comp-data-index-in-parent 3)
+;; the depth of the component is stored to be able to init the component-state var when a
+;; component is re-rendered because of a local state change
 (def ^{:private true} index-comp-data-depth 4)
 (def ^{:private true} index-comp-data-dirty-flag 5)
 
 (def ^{:private true} index-render-queue-async 0)
 (def ^{:private true} index-render-queue-dirty-flag 1)
 
+;; The data needed in a local state watcher is stored on the local state itself, using this key.
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
 
 (def ^{:dynamic true :private true} *component* nil)
@@ -42,32 +55,51 @@
 ;; Thus it keeps the value of the higher moved node in the tree, even if child nodes are
 ;; themselves moved. This is necessary to know when to unset the value 
 (def ^{:dynamic true :private true} *moved-vnode* nil)
-;; used to handle a edge case whene open-impl returns two vnodes to be removed
+;; used to handle a edge case when open-impl returns two vnodes to be removed.
+;; See the invalid states handling in open-impl
 (def ^{:dynamic true :private true} *vnode-to-remove* nil)
 (def ^{:dynamic true :private true} *props* nil)
+;; Whether to skip a component body or not, depending on whether its props and state has changed
+;; or not
 (def ^{:dynamic true :private true} *skip* nil)
+;; component-depth is used to be able to always render components top -> down. Rendering
+;; components top->down avoids unecessary diffing sometimes
 (def ^{:dynamic true :private true} *component-depth* nil)
 ;; Used to avoid re-rendering when a state update is done from a will-receive-props hook
 (def ^{:dynamic true :private true} *watch-local-state* true)
 (def ^{:dynamic true :private true} *components-queue-count* nil)
+;; Components that need to be re-rendered are stored in the render-queue
 (def ^{:dynamic true :private true} *render-queue* nil)
 ;; incremented on svg open, decremented on svg close, reseted to 0 on foreignObject open,
 ;; previous value restored on foreignObject close
 (def ^{:dynamic true :private true} *svg-namespace* nil)
 
+;; Nodes that moved because of child nodes reconciliation
+;; are marked with this flag. This is useful to detect an attempt to move an already moved node,
+;; a situation which can happen when duplicate keys are met.
+;; This flag changes on every render pass because this avoids the need to clean the flag when
+;; cleaning a keymap.
 (defonce ^{:private true} moved-flag nil)
+;; Nodes are marked as "moving" during child node reconciliation when they get removed. We mark
+;; them as moving because a removed node may be a node that is in fact moving further. So we
+;; mark it as moving but keep it in the keymap so it can be added back later. If it is added
+;; back later (the node moved further), then we clean the moving-flag, else (if the node really
+;; is a removed node) the node is really removed when cleaning the keymap
 (defonce ^{:private true} moving-flag #js [])
+;; Set on a component "props" slot when this component does not have props. This is useful to
+;; differentiate between "nil" props and no props at all. When a component does not have props,
+;; no props are passed to the patch function when it is re-rendered.
 (defonce ^{:private true} no-props-flag #js [])
 ;; Used to enqueue components with a did-mount / will-unmount hook, and then call the hooks
 ;; in order
-(def ^{:private true} *components-queue* #js [])
+(def ^{:private true} components-queue #js [])
 
 (def svg-ns "http://www.w3.org/2000/svg")
 (def xml-ns "http://www.w3.org/XML/1998/namespace")
 (def xlink-ns "http://www.w3.org/1999/xlink")
 
-(def ^:dynamic *state* nil)
-(def ^:dynamic *vnode* nil)
+(def ^:dynamic *state* "The local state value of the current component." nil)
+(def ^:dynamic *vnode* "The current virtual node, or component." nil)
 
 (declare process-render-queue)
 
@@ -77,13 +109,19 @@
 (defn- dirty-component? [vnode]
   (aget vnode index-comp-data index-comp-data-dirty-flag))
 
-(defn component-name [vnode]
+(defn component-name
+  "Return the fully qualified name of the node's component, as a string."
+  [vnode]
   (assert vnode "muance.core/component-name expects a vnode.")
   (if (component? vnode)
     (aget vnode index-comp-data index-comp-data-name)
     (aget vnode index-component index-comp-data index-comp-data-name)))
 
-(defn moving? [vnode]
+(defn moving?
+  "Whether a node or one of its parent is being moved during child nodes reconciliation, or not.
+  Use this function to handle the potential side effect of moving a DOM node, such as loss of
+  focus state."
+  [vnode]
   (assert vnode "muance.core/moving? expects a vnode.")
   (boolean *moved-vnode*))
 
@@ -100,19 +138,26 @@
 
 (declare ref-node-down)
 
-(defn dom-nodes [vnode]
+(defn dom-nodes
+  "Return an javascript array of all the DOM nodes associated with vnode."
+  [vnode]
   (assert vnode "muance.core/dom-nodes expects a vnode.")
   (if (component? vnode)
     (dom-nodes* #js [] vnode)
     #js [(aget vnode index-node)]))
 
-(defn dom-node [vnode]
+(defn dom-node
+  "Return the DOM nodes associated with vnode. Returns the first children of vnode if vnode is
+  a component and is associated with multiple DOM nodes."
+  [vnode]
   (assert vnode "muance.core/dom-node expects a vnode.")
   (if (component? vnode)
     (ref-node-down vnode)
     (aget vnode index-node)))
 
-(defn key [vnode]
+(defn key
+  "Returns the :muance.core/key attribute of vnode, as a string."
+  [vnode]
   (assert vnode "muance.core/key expects a vnode.")
   (aget vnode index-key))
 
@@ -160,7 +205,7 @@
   (when (component? vnode)
     (remove-watch (aget vnode index-comp-data index-comp-data-state-ref) ::component))
   (when (aget vnode index-unmount)
-      (aset *components-queue* *components-queue-count* vnode)
+      (aset components-queue *components-queue-count* vnode)
       (set! *components-queue-count* (inc *components-queue-count*)))
   (when-let [children (aget vnode index-children)]
     (let [children-count (.-length children)]
@@ -173,7 +218,7 @@
 (defn- call-unmounts [queue-start]
   (loop [i (dec *components-queue-count*)]
     (when (>= i queue-start)
-      (let [vnode (aget *components-queue* i)
+      (let [vnode (aget components-queue i)
             component (if (component? vnode) vnode (aget vnode index-component))
             props (aget component index-comp-props)
             state (aget component index-comp-state)]
@@ -436,8 +481,8 @@
     (do
       (set! *new-node* (dec *new-node*))
       (when did-mount
-        (aset *components-queue* *components-queue-count* did-mount)
-        (aset *components-queue* (inc *components-queue-count*) *vnode*)
+        (aset components-queue *components-queue-count* did-mount)
+        (aset components-queue (inc *components-queue-count*) *vnode*)
         (set! *components-queue-count* (+ *components-queue-count* 2))))
     (when did-update (did-update *props* *state*)))
   (when (identical? *moved-vnode* *vnode*)
@@ -684,12 +729,12 @@
 
 (defn- call-did-mount-hooks [i]
   (when (> i -1)
-    (let [vnode (aget *components-queue* i)
+    (let [vnode (aget components-queue i)
           component (if (component? vnode) vnode (aget vnode index-component))
           props (aget component index-comp-props)
           state-ref (aget component index-comp-data index-comp-data-state-ref)]
       (set! *vnode* vnode)
-      ((aget *components-queue* (dec i)) props state-ref))
+      ((aget components-queue (dec i)) props state-ref))
     (recur (- i 2))))
 
 ;; vnode is nil on first render
@@ -762,32 +807,39 @@
 (deftype VTree [vnode render-queue])
 
 (defn vtree
+  "Creates a new vtree. By default the vtree is rendered asynchronously. When async is false,
+  the vtree is rendered synchronously."
   ([]
    (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js [true]))
   ([async]
    (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js [async])))
 
 (defn patch
-  ([vtree patch-fn]
-   (patch-root-impl vtree patch-fn no-props-flag))
-  ([vtree patch-fn props]
-   (patch-root-impl vtree patch-fn props)))
+  "Patch a vtree using component. The optional third argument is the component props."
+  ([vtree component]
+   (patch-root-impl vtree component no-props-flag))
+  ([vtree component props]
+   (patch-root-impl vtree component props)))
 
-;; todo append to a documentFragment
 (defn remove [vtree]
+  "Remove a vtree from the DOM. A removed vtree can still be patched and added back to the DOM."
   (let [vnode (.-vnode vtree)
         fragment (.createDocumentFragment js/document)]
     (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* fragment comp nil))
     (aset vnode index-node fragment)))
 
-(defn insert-before [vtree parent-node ref-node]
-  (let [vnode (.-vnode vtree)]
+(defn insert-before [vtree ref-node]
+  "Inserts the DOM node(s) associated with vtree in the DOM, before ref-node."
+  (let [parent-node (.-parentNode ref-node)
+        vnode (.-vnode vtree)]
     (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* parent-node comp ref-node))
     (aset vnode index-node parent-node)))
 
 (defn append-child [vtree parent-node]
+  "Inserts the DOM node(s) associated with vtree in the DOM, as the last child(ren) of 
+parent-node."
   (let [vnode (.-vnode vtree)]
     (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* parent-node comp nil))

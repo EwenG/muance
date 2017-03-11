@@ -3,28 +3,28 @@
             [clojure.string :as string])
   (:import [cljs.tagged_literals JSValue]))
 
-(defonce typeid (atom 1))
-(defonce comp-typeid (atom -1))
+(defonce ^{:private true} typeid (atom 1))
+(defonce ^{:private true} comp-typeid (atom -1))
 
-(defn inc-typeid [t]
+(defn- inc-typeid [t]
   ;; MAX_SAFE_INTEGER
   (if (= t 9007199254740991) 1 (inc t)))
 
-(defn dec-comp-typeid [t]
+(defn- dec-comp-typeid [t]
   ;; MIN_SAFE_INTEGER
   (if (= t -9007199254740991) -1 (dec t)))
 
-(defn safe-symbol [x]
+(defn- safe-symbol [x]
   (when x (symbol x)))
 
-(defn resolve-namespace
+(defn- resolve-namespace
   [env sym ns]
   (if (= 'cljs.core sym)
     sym
     (-> (merge (:requires ns) (:require-macros ns))
         (get sym))))
 
-(defn cljs-resolve [env sym]
+(defn- cljs-resolve [env sym]
   (when (and sym (not (get-in env [:locals sym])))
     (let [sym-ns (safe-symbol (namespace sym))
           ns-name (if sym-ns
@@ -35,7 +35,7 @@
 (declare compile-element-macro)
 (declare text)
 
-(defn compile-form [env form]
+(defn- compile-form [env form]
   (cond (and (seq? form) (symbol? (first form)))
         (let [var (cljs-resolve env (first form))
               clj-var (resolve var)]
@@ -46,7 +46,7 @@
         (string? form) `(muance.core/text-node ~form)
         :else form))
 
-(defn local-dep [{name :name fn-var :fn-var
+(defn- local-dep [{name :name fn-var :fn-var
                   local :local init :init
                   op :op tag :tag dynamic :dynamic
                   ns :ns :as info}]
@@ -69,12 +69,12 @@
       (recur (:info init)))
     :else nil))
 
-(defn static-symbol? [env s]
+(defn- static-symbol? [env s]
   (if-let [local (get (:locals env) s)]
     (not (local-dep local))
     (not (= 'muance.core/*state* (cljs-resolve env s)))))
 
-(defn static? [env x]
+(defn- static? [env x]
   (cond (nil? x) true
         (boolean? x) true
         (string? x) true
@@ -86,23 +86,23 @@
         (symbol? x) (static-symbol? env x)
         :else false))
 
-(defn as-str [x]
+(defn- as-str [x]
   (cond (string? x) x
         (keyword? x) (name x)
         :else `(cljs.core/str ~x)))
 
-(def props-to-rename
+(def ^{:private true} props-to-rename
   {:class :className
    :for :htmlFor
    :accept-charset :acceptCharset
    :http-equiv :httpEquiv})
 
-(defn rename-prop [[k v :as prop]]
+(defn- rename-prop [[k v :as prop]]
   (if-let [new-k (get props-to-rename k)]
     [new-k v]
     prop))
 
-(defn attributes [body]
+(defn- attributes [body]
   (let [attrs (->> (partition 2 body)
                    (take-while (comp keyword? first))
                    (map rename-prop))]
@@ -116,18 +116,18 @@
                     (str "duplicate attributes: " (pr-str attrs-keys)))))))
     (into {} (map vec attrs))))
 
-(defn handler? [h]
+(defn- handler? [h]
   (and (vector? h) (keyword? (first h))))
 
-(defn validate-attributes [{:keys [::hooks style ::on] :as attributes}]
+(defn- validate-attributes [{:keys [::hooks style ::on] :as attributes}]
   (when (contains? attributes ::hooks) (assert (map? hooks)))
   (when (contains? attributes :style) (assert (map? style)))
   (when (contains? attributes ::on) (assert (or (handler? on) (every? handler? on)))))
 
-(defn body-without-attributes [body attributes]
+(defn- body-without-attributes [body attributes]
   (drop (* 2 (count attributes)) body))
 
-(defn class-call [env class]
+(defn- class-call [env class]
   (if (vector? class)
     (if (every? (partial static? env) class)
       `(prop-static "className" ~(reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class))
@@ -137,7 +137,7 @@
       `(prop-static "className" ~class)
       `(prop "className" ~class))))
 
-(defn style-calls [env style]
+(defn- style-calls [env style]
   (map (fn [[k v]]
          (if (string/starts-with? (str k) ":--")
            (if (static? env v)
@@ -148,7 +148,7 @@
              `(style ~(as-str k) ~v))))
        style))
 
-(defn on-calls [env ons]
+(defn- on-calls [env ons]
   (let [static? (partial static? env)
         ons (if (handler? ons) [ons] ons)]
     (map (fn [[k f & args]]
@@ -171,7 +171,7 @@
                                  ~(nth args 2))))))
          ons)))
 
-(defn attribute-calls [env tag attrs]
+(defn- attribute-calls [env tag attrs]
   (reduce (fn [calls [k v]]
             (cond
               (= k ::key) calls
@@ -208,7 +208,7 @@
                                   `(prop ~(as-str k) ~v)))))
           '() attrs))
 
-(defn with-svg-namespace [tag body]
+(defn- with-svg-namespace [tag body]
   (case tag
     "svg" `(do
              (set! *svg-namespace* (cljs.core/inc *svg-namespace*))
@@ -220,7 +220,7 @@
                        (set! *svg-namespace* parent-svg-namespace#))
     `(do ~@body)))
 
-(defn compile-element-macro
+(defn- compile-element-macro
   [env tag typeid body]
   (let [compile-form (partial compile-form env)
         {key ::key
@@ -234,18 +234,25 @@
         ~@(map compile-form body)
         (close ~did-mount ~did-update)))))
 
-(defmacro text [& text]
+(defmacro text
+  "Creates a text node. The text node value is the string concatenation of the text macro 
+  arguments."
+  [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
 
-(defn with-macro-meta [tag]
+(defn- with-macro-meta [tag]
   (with-meta tag (assoc (meta tag) ::tag (str tag))))
 
-(defmacro make-element-macro [tag]
+(defmacro make-element-macro
+  "Defines a new HTML element macro with the provided tag. The newly defined HTML element macro
+  can be used during a Muance vtree patching to create an HTML element which name is the provided
+  tag."
+  [tag]
   `(defmacro ~(with-macro-meta tag) [~'& ~'body]
      (swap! typeid inc-typeid)
      (compile-element-macro ~'&env ~(str tag) @typeid ~'body)))
 
-(defn params-with-props [params]
+(defn- params-with-props [params]
   (cond (symbol? params) [params params]
         (vector? params) (let [props-sym (gensym "props")]
                            [(conj params :as props-sym) props-sym])
@@ -253,7 +260,9 @@
                         [(conj params [:as props-sym]) props-sym])
         :else nil))
 
-(defmacro defcomp [name docstring-or-params & params-body]
+(defmacro defcomp
+  "Define a Muance stateful component. A Muance component takes zero or one argument."
+  [name docstring-or-params & params-body]
   (swap! comp-typeid dec-comp-typeid)
   (let [typeid @comp-typeid
         name (if (string? docstring-or-params)
@@ -283,7 +292,7 @@
             ~@body)
           (close-comp parent-component# hooks#))))))
 
-(defn assert-component [env component msg]
+(defn- assert-component [env component msg]
   (let [_ (assert (symbol? component) msg)
         resolved (cljs-resolve env component)
         comp-ns (and resolved (symbol (namespace resolved)))
@@ -292,7 +301,10 @@
         var-map (get-in @cljs.env/*compiler* [::ana/namespaces comp-ns :defs comp-sym])]
     (assert (get-in var-map [:meta ::component]) msg)))
 
-(defmacro hooks [component hooks-map]
+(defmacro hooks
+  "Attaches a set of lifecycle hooks to a Muance component. hooks-map must be a literal map of
+  lifecycle hooks."
+  [component hooks-map]
   (assert-component
    &env component "muance.core/hooks first parameter must be a component")
   (assert (map? hooks-map))
