@@ -15,6 +15,8 @@ Muance does not recreate a new virtual DOM on every render, which may reduce the
 
 Muance size is around 8k when minified, before gzip.
 
+[Here](https://eweng.github.io/muance/examples/dbmonster/public/) is a dbmonster implementation using Muance.
+
 ## Quick start
 
 The following code snippet creates a component and renders it on the page:
