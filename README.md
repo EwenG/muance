@@ -278,6 +278,9 @@ Child nodes reconciliation is often used with `doseq` loops:
   (h/p ::m/key k))
 ```
 
+When a node or one of its parents is moving during child nodes reconciliation, it can lose its DOM state (loss of focus state for example).
+Use the `(muance.core/moving? vnode)` function inside the `will-update`, or `did-update` [lifecycle hooks](#lifecycle-hooks) to handle this particular case.
+
 ## Event handlers
 
 The `:muance.core/on` [attribute](#attributes) attaches one or multiple event handlers on a node. 
@@ -353,6 +356,9 @@ Called before the node or component is updated.
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
 
+`will-update` is also called when the node or one of its parents is moving during [child nodes reconciliation](#child-nodes-reconciliation), because a moving DOM node can lose its DOM state (loss of focus state for example).
+Use the `(muance.core/moving? vnode)` function inside `will-update` to handle this particular case.
+
 #### did-update
 
 Called after the node or component is updated.
@@ -367,6 +373,9 @@ Called after the node or component is updated.
 
 - `props`: the props of the node's component
 - `state-ref`: the local state value of the node's component
+
+`did-update` is also called when the node or one of its parents is moving during [child nodes reconciliation](#child-nodes-reconciliation), because a moving DOM node can lose its DOM state (loss of focus state for example).
+Use the `(muance.core/moving? vnode)` function inside `did-update` to handle this particular case.
 
 #### will-unmount
 
