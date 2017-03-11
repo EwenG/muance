@@ -356,7 +356,7 @@ Called before the node or component is updated.
 ```
 
 - `props`: the props of the node's component
-- `state-ref`: the local state value of the node's component
+- `state`: the local state value of the node's component
 
 `will-update` is also called when the node or one of its parents is moving during [child nodes reconciliation](#child-nodes-reconciliation), because a moving DOM node can lose its DOM state (loss of focus state for example).
 Use the `(muance.core/moving? vnode)` function inside `will-update` to handle this particular case.
@@ -374,7 +374,7 @@ Called after the node or component is updated.
 ```
 
 - `props`: the props of the node's component
-- `state-ref`: the local state value of the node's component
+- `state`: the local state value of the node's component
 
 `did-update` is also called when the node or one of its parents is moving during [child nodes reconciliation](#child-nodes-reconciliation), because a moving DOM node can lose its DOM state (loss of focus state for example).
 Use the `(muance.core/moving? vnode)` function inside `did-update` to handle this particular case.
@@ -393,7 +393,7 @@ Parents `will-mount` hooks are called *after* their children's.
 ```
 
 - `props`: the props of the node's component
-- `state-ref`: the local state value of the node's component
+- `state`: the local state value of the node's component
 
 ### Components lifecycle hooks
 
@@ -421,8 +421,9 @@ Use `will-receive-props` to update the component's local state in response to pr
                                               (reset! state-ref "state-value"))})
 ```
 
+- `prev-props`: the previous props of the node's component
 - `props`: the props of the node's component
-- `state-ref`: the local state value of the node's component
+- `state-ref`: the local state of the node's component (an atom)
 
 ## Side effectful API pitfalls
 
