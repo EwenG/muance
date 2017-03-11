@@ -42,6 +42,7 @@ See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/
 ## Top level API
 
 - `(muance.core/vtree)`: Creates a new vtree
+- `(muance.core/vtree async)`: Creates a new vtree, the vtree is rendered asynchronously if async is true, synchronously otherwise. See [asynchronous rendering](#asynchronous-rendering).
 - `(m/append-child vtree parent-node)`: Append the DOM node associated with the `vtree` to the children of the `parent-node`
 - `(m/insert-before vtree ref-node)`: Insert the DOM node associated with the `vtree` before the `ref-node`
 - `(m/remove vtree)`: Remove the DOM node associated with the vtree from the DOM. It can be added back to the DOM using one of the above method
@@ -49,6 +50,11 @@ See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/
 - `(m/patch vtree component props)`: Patch the `vtree` using `component`, passing the parameter `props` to `component`
 - `m/defcomp`: Define a component. Use it like `defn`, with the limitation that `defcomp` takes zero or one parameter
 - `(m/hooks component hooks-map)`: Adds [lifecycle hooks](#lifecycle-hooks) to `component` 
+
+### Asynchronous rendering
+
+By default, Muance renders vtrees asynchronously, using [requestAnimationFrame](https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame).
+Rendering can be made synchronous by passing false to `muance.core/vtree`.
 
 ## Components
 
@@ -71,7 +77,7 @@ Components are called like functions and take a *key* as an optional first param
 Components are stateful. A Component is re-rendered when one of its props or local state changes.
 The value of components local state is bound to the `muance.core/*state*` var and can be used in the component body or one of its [lifecycle hooks](#lifecycle-hooks) methods.
 
-Components local state is an [atom](https://clojuredocs.org/clojure.core/atom). The atom is passed as a parameter to [event handlers](#event-handlers) and several of the component [lifecycle hooks](#lifecycle-hooks). Changing the value of the atom marks the component as needed to be re-rendered.
+Components local state is an [atom](https://clojure.org/reference/atoms). The atom is passed as a parameter to [event handlers](#event-handlers) and several of the component [lifecycle hooks](#lifecycle-hooks). Changing the value of the atom marks the component as needed to be re-rendered.
 
 
 ## Nodes
