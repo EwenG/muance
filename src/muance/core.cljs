@@ -29,6 +29,9 @@
 (def ^{:private true} index-comp-data-depth 4)
 (def ^{:private true} index-comp-data-dirty-flag 5)
 
+(def ^{:private true} index-render-queue-async 0)
+(def ^{:private true} index-render-queue-dirty-flag 1)
+
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
 
 (def ^{:dynamic true :private true} *component* nil)
@@ -125,18 +128,21 @@
           vnode (aget stateful-data 0)
           comp-fn (aget stateful-data 1)
           render-queue (aget stateful-data 2)
+          async (aget render-queue index-render-queue-async)
           component-depth (aget vnode index-comp-data index-comp-data-depth)]
       (when (not (dirty-component? vnode))
         (aset (aget vnode index-comp-data) index-comp-data-dirty-flag true)
-        (if-let [dirty-comps (aget render-queue component-depth)]
+        (if-let [dirty-comps (aget render-queue (inc component-depth))]
           (do (.push dirty-comps comp-fn)
               (.push dirty-comps vnode))
-          (aset render-queue component-depth #js [comp-fn vnode]))
-        (when-not (aget render-queue 0)
-          (aset render-queue 0 true)
-          (.requestAnimationFrame js/window
-                                  (fn []
-                                    (process-render-queue render-queue))))))))
+          (aset render-queue (inc component-depth) #js [comp-fn vnode]))
+        (when-not (aget render-queue index-render-queue-dirty-flag)
+          (aset render-queue index-render-queue-dirty-flag true)
+          (if async
+            (.requestAnimationFrame js/window
+                                    (fn []
+                                      (process-render-queue render-queue)))
+            (process-render-queue render-queue)))))))
 
 (defn- remove-real-node [vnode]
   (if (component? vnode)
@@ -707,7 +713,7 @@
                               0)
             *component-depth* (if vnode
                                 (aget vnode index-comp-data index-comp-data-depth)
-                                0)
+                                1)
             *watch-local-state* false
             *components-queue-count* 0
             *render-queue* render-queue]
@@ -719,40 +725,47 @@
 
 (defn- process-render-queue [render-queue]
   (let [l (.-length render-queue)]
-    (loop [i 1]
+    (loop [i 2]
       (when (< i l)
-        (let [dirty-comps (aget render-queue i)
-              l (if dirty-comps (.-length dirty-comps) 0)]
-          (loop [j (dec l)]
-            (when (> j -1)
-              (let [vnode (.pop dirty-comps)
-                    comp-fn (.pop dirty-comps)]
-                (when (dirty-component? vnode)
-                  (patch-impl render-queue
-                              (aget vnode index-parent-vnode) vnode
-                              comp-fn (aget vnode index-comp-props))))
-              (recur (- j 2)))))
+        (when-let [dirty-comps (aget render-queue i)]
+          (loop []
+            (let [vnode (.pop dirty-comps)
+                  comp-fn (.pop dirty-comps)]
+              ;; stop when there is no more dirty component. A component can push itself in the
+              ;; dirty comps (at the same depth, in a did-mount hook)
+              (when (and vnode (dirty-component? vnode))
+                (patch-impl render-queue
+                            (aget vnode index-parent-vnode) vnode
+                            comp-fn (aget vnode index-comp-props))
+                (recur)))))
         (recur (inc i)))))
-  (aset render-queue 0 nil))
+  (aset render-queue index-render-queue-dirty-flag nil))
 
 (defn- patch-root-impl [vtree patch-fn props]
   ;; On first render, render synchronously
   (let [vnode (.-vnode vtree)
         render-queue (.-render-queue vtree)
+        async (aget render-queue index-render-queue-async)
         children (aget vnode index-children)]
     (if-let [comp (aget children 0)]
-      (do (aset render-queue 0 true)
-          (.requestAnimationFrame js/window
-                                  (fn []
-                                    (patch-impl render-queue vnode comp
-                                                patch-fn props)
-                                    (process-render-queue render-queue))))
+      (do (aset render-queue index-render-queue-dirty-flag true)
+          (if async
+            (.requestAnimationFrame js/window
+                                    (fn []
+                                      (patch-impl render-queue vnode comp patch-fn props)
+                                      (process-render-queue render-queue)))
+            (do
+              (patch-impl render-queue vnode comp patch-fn props)
+              (process-render-queue render-queue))))
       (patch-impl render-queue vnode nil patch-fn props))))
 
 (deftype VTree [vnode render-queue])
 
-(defn vtree []
-  (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js []))
+(defn vtree
+  ([]
+   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js [true]))
+  ([async]
+   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js [async])))
 
 (defn patch
   ([vtree patch-fn]

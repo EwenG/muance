@@ -214,7 +214,7 @@
 (deftest render-queue []
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth5-props" :display true}))
+  (m/patch @vtree render-queue-depth0 {:depth1 41 :depth2 "depth3-props" :display true}))
 
 
 
@@ -274,6 +274,24 @@
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
   (m/patch @vtree comp-exception-f true))
+
+
+
+(m/defcomp comp-render-queue-same-depth-f [b]
+  (prn "rendering")
+  (if b
+    (h/p (m/text m/*state*))
+    (do (h/p
+         ::m/hooks {:did-mount (fn [props state-ref] (swap! state-ref inc))}
+         (m/text m/*state*))
+        (h/p
+         ::m/hooks {:did-mount (fn [props state-ref] (swap! state-ref inc))}
+         (m/text m/*state*)))))
+
+(deftest comp-render-queue-same-depth []
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree comp-render-queue-same-depth-f false))
 
 (comment
 
