@@ -3,14 +3,14 @@
             [clojure.string :as string])
   (:import [cljs.tagged_literals JSValue]))
 
-(defonce ^{:private true} typeid (atom 1))
-(defonce ^{:private true} comp-typeid (atom -1))
+(defonce typeid (atom 1))
+(defonce comp-typeid (atom -1))
 
-(defn- inc-typeid [t]
+(defn inc-typeid [t]
   ;; MAX_SAFE_INTEGER
   (if (= t 9007199254740991) 1 (inc t)))
 
-(defn- dec-comp-typeid [t]
+(defn dec-comp-typeid [t]
   ;; MIN_SAFE_INTEGER
   (if (= t -9007199254740991) -1 (dec t)))
 
@@ -220,7 +220,7 @@
                        (set! *svg-namespace* parent-svg-namespace#))
     `(do ~@body)))
 
-(defn- compile-element-macro
+(defn compile-element-macro
   [env tag typeid body]
   (let [compile-form (partial compile-form env)
         {key ::key
@@ -251,6 +251,10 @@
   `(defmacro ~(with-macro-meta tag) [~'& ~'body]
      (swap! typeid inc-typeid)
      (compile-element-macro ~'&env ~(str tag) @typeid ~'body)))
+
+(comment
+  (macroexpand '(make-element-macro div))
+  )
 
 (defn- params-with-props [params]
   (cond (symbol? params) [params params]
