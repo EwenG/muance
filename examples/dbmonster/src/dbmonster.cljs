@@ -66,9 +66,6 @@
   (m/append-child monitor-vtree (.-body js/document))
   (m/patch monitor-vtree monitor)
   
-  (defn loadSamples []
-    (m/patch vtree dbmon (-> js/ENV (.generateData) (.toArray)))
-    (.setTimeout js/window loadSamples (.-timeout js/ENV)))
   (loadSamples)
 
   )

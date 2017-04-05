@@ -252,10 +252,6 @@
      (swap! typeid inc-typeid)
      (compile-element-macro ~'&env ~(str tag) @typeid ~'body)))
 
-(comment
-  (macroexpand '(make-element-macro div))
-  )
-
 (defn- params-with-props [params]
   (cond (symbol? params) [params params]
         (vector? params) (let [props-sym (gensym "props")]
