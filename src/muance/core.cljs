@@ -53,10 +53,14 @@
 (def ^{:dynamic true :private true} *attrs-count* nil)
 ;; Set to the value of the moved node when a moved node is met, unless if was already set before
 ;; Thus it keeps the value of the higher moved node in the tree, even if child nodes are
-;; themselves moved. This is necessary to know when to unset the value 
+;; themselves moved. This is necessary to know when to unset the value
 (def ^{:dynamic true :private true} *moved-vnode* nil)
-;; used to handle a edge case when open-impl returns two vnodes to be removed.
+;; Used for two different things:
+;; - Used to handle a edge case when open-impl returns two vnodes to be removed.
 ;; See the invalid states handling in open-impl
+;; - Bound to the vnode that is going to be removed when calling unmount hooks.
+;; This lets the user the possibility to prevent the real DOM node removal. The user will
+;; instead get a reference to the real node to remove it later
 (def ^{:dynamic true :private true} *vnode-to-remove* nil)
 (def ^{:dynamic true :private true} *props* nil)
 ;; Whether to skip a component body or not, depending on whether its props and state has changed
@@ -73,6 +77,9 @@
 ;; incremented on svg open, decremented on svg close, reseted to 0 on foreignObject open,
 ;; previous value restored on foreignObject close
 (def ^{:dynamic true :private true} *svg-namespace* nil)
+;; Whether to prevented the real dom node from being removed after unmount hooks have been
+;; called or not
+(def ^{:dynamic true :private true} *prevent-node-removal* nil)
 
 ;; Nodes that moved because of child nodes reconciliation
 ;; are marked with this flag. This is useful to detect an attempt to move an already moved node,
@@ -189,6 +196,12 @@
                                       (process-render-queue render-queue)))
             (process-render-queue render-queue)))))))
 
+(defn remove-dom-node
+  "Remove a DOM node from the DOM. Do nothing if the node has no parent."
+  [node]
+  (when-let [p (.-parentNode node)]
+    (.removeChild p node)))
+
 (defn- remove-real-node [vnode]
   (if (component? vnode)
     (when-let [children (aget vnode index-children)]
@@ -198,8 +211,7 @@
             (remove-real-node (aget children i))
             (recur (inc i))))))
     (let [node (aget vnode index-node)]
-      (when-let [p (.-parentNode node)]
-        (.removeChild p node)))))
+      (remove-dom-node node))))
 
 (defn- enqueue-unmounts [vnode]
   (when (component? vnode)
@@ -228,13 +240,28 @@
       (recur (dec i))))
   (set! *components-queue-count* queue-start))
 
+(defn prevent-node-removal
+  "Prevent one or multiple DOM nodes from beeing removed from the DOM. This function must be called in an unmount lifecycle hooks and returns the DOM node that would normaly have been removed after the execution of the unmount hlifecycle hook. If multiple DOM nodes are prevented from beeing removed, this function only returns the first one."
+  []
+  (set! *prevent-node-removal* true)
+  (dom-node *vnode-to-remove*))
+
+(defn prevent-nodes-removal
+  "Prevent one or multiple DOM nodes from beeing removed from the DOM. This function must be called in an unmount lifecycle hooks and returns an array of the DOM nodes that would normaly have been removed after the execution of the unmount lifecycle hook."
+  []
+  (set! *prevent-node-removal* true)
+  (dom-nodes *vnode-to-remove*))
+
 (defn- remove-node [vnode]
   (let [current-vnode *vnode*
         queue-start *components-queue-count*]
     (enqueue-unmounts vnode)
-    (call-unmounts queue-start)
-    (set! *vnode* current-vnode))
-  (remove-real-node vnode))
+    (binding [*vnode-to-remove* vnode
+              *prevent-node-removal* false]
+      (call-unmounts queue-start)
+      (set! *vnode* current-vnode)
+      (when-not *prevent-node-removal*
+          (remove-real-node vnode)))))
 
 (defn- clean-keymap [vnode]
   (let [keymap-invalid (or (aget vnode index-keymap-invalid) 0)]
@@ -761,7 +788,8 @@
                                 1)
             *watch-local-state* false
             *components-queue-count* 0
-            *render-queue* render-queue]
+            *render-queue* render-queue
+            *prevent-node-removal* nil]
     (if (identical? maybe-props no-props-flag)
       (patch-fn (when vnode (aget vnode index-key)))
       (patch-fn (when vnode (aget vnode index-key)) maybe-props))

@@ -9,6 +9,7 @@ A virtual dom library for Clojurescript.
 - No synthetic event system
 - Svg support
 - Asynchronous rendering by default
+- DOM node removal hook for easy fade out animation
 
 Muance exposes a side effectful API which mutates an in memory representation of a virtual DOM.
 Muance does not recreate a new virtual DOM on every render, which may reduce the pressure on the garbage collector.
@@ -424,6 +425,27 @@ Use `will-receive-props` to update the component's local state in response to pr
 - `prev-props`: the previous props of the node's component
 - `props`: the props of the node's component
 - `state-ref`: the local state of the node's component (an atom)
+
+## Hooking into DOM node removal
+
+Animating the removal of a DOM node requires the DOM node to be kept 
+in the DOM for the duration of the animation. Use the `prevent-node-removal`
+function to hook into the removal of a DOM node. This function must 
+only be used in unmount [lifecycle hooks](#lifecycle-hooks) and is intended 
+to be used for fade out animations. 
+
+- (m/prevent-node-removal)
+
+This function returns the DOM node that would have normally been removed by 
+Muance if it had not been called. It is the responsibility of the caller 
+to remove the node from the DOM. The helper function `remove-dom-node` can be 
+used to remove a node from the DOM.
+
+- (m/remove-dom-node)
+
+The `prevent-nodes-removal` function has the same effect than the 
+`prevent-node-removal` function but returns an array of DOM nodes. Use it
+to prevent the removal of the multiple DOM nodes associated with a component. 
 
 ## Side effectful API pitfalls
 

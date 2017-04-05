@@ -293,6 +293,24 @@
   (m/append-child @vtree (utils/new-root))
   (m/patch @vtree comp-render-queue-same-depth-f false))
 
+
+
+
+(m/defcomp comp-prevent-node-removal-f [b]
+  (if b
+    (h/div
+     ::m/hooks {:will-unmount (fn [props state]
+                                (let [node (m/prevent-node-removal)]
+                                  (.setTimeout js/window
+                                               (fn [] (m/remove-dom-node node))
+                                               3000)))})
+    (h/p)))
+
+(deftest comp-prevent-node-removal []
+  (reset! vtree (m/vtree))
+  (m/append-child @vtree (utils/new-root))
+  (m/patch @vtree comp-prevent-node-removal-f true))
+
 (comment
 
   (cljs.pprint/pprint (utils/format-vtree @vtree))
