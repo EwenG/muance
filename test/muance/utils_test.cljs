@@ -119,5 +119,7 @@
              i 0]
         (cond (= i 0)
               (recur (conj! arr (aget render-queue 0)) (inc i))
+              (= i 1)
+              (recur (conj! arr (aget render-queue 1)) (inc i))
               (< i l) (recur (conj! arr (format-depth (aget render-queue i))) (inc i))
               :else (persistent! arr))))))

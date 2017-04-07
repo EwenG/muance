@@ -42,7 +42,8 @@
 (def ^{:private true} index-comp-data-dirty-flag 5)
 
 (def ^{:private true} index-render-queue-async 0)
-(def ^{:private true} index-render-queue-dirty-flag 1)
+(def ^{:private true} index-render-queue-post-render 1)
+(def ^{:private true} index-render-queue-dirty-flag 2)
 
 ;; The data needed in a local state watcher is stored on the local state itself, using this key.
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
@@ -796,9 +797,25 @@
     (set! *watch-local-state* true)
     (call-did-mount-hooks (dec *components-queue-count*))))
 
+(defn- call-post-render [post-render]
+  (case (.-length post-render)
+    1 ((aget post-render 0))
+    2 ((aget post-render 0) (aget post-render 1))
+    3 ((aget post-render 0) (aget post-render 1) (aget post-render 2))
+    4 ((aget post-render 0) (aget post-render 1) (aget post-render 2) (aget post-render 3))))
+
+(defn- process-post-render-hooks [render-queue]
+  (let [post-renders (aget render-queue index-render-queue-post-render)]
+    (loop [i 0]
+      (let [post-render (aget post-renders i)]
+        (when-not (nil? post-render)
+          (call-post-render post-render)
+          (recur (inc i)))))
+    (aset render-queue index-render-queue-post-render #js [])))
+
 (defn- process-render-queue [render-queue]
   (let [l (.-length render-queue)]
-    (loop [i 2]
+    (loop [i 3]
       (when (< i l)
         (when-let [dirty-comps (aget render-queue i)]
           (loop []
@@ -812,6 +829,7 @@
                             comp-fn (aget vnode index-comp-props))
                 (recur)))))
         (recur (inc i)))))
+  (process-post-render-hooks render-queue)
   (aset render-queue index-render-queue-dirty-flag nil))
 
 (defn- patch-root-impl [vtree patch-fn props]
@@ -830,17 +848,51 @@
             (do
               (patch-impl render-queue vnode comp patch-fn props)
               (process-render-queue render-queue))))
-      (patch-impl render-queue vnode nil patch-fn props))))
+      (do (patch-impl render-queue vnode nil patch-fn props)
+          (process-post-render-hooks render-queue)))))
 
 (deftype VTree [vnode render-queue])
+
+(defn- get-render-queue [vnode]
+  (cond (instance? VTree vnode)
+        (.-render-queue vnode)
+        (component? vnode)
+        (-> (aget vnode index-comp-data index-comp-data-state-ref)
+            (o/get vnode-stateful-key)
+            (aget 2))
+        :else (-> (aget vnode index-component index-comp-data
+                        index-comp-data-state-ref)
+                  (o/get vnode-stateful-key)
+                  (aget 2))))
+
+(defn post-render
+  ([vnode f]
+   (assert vnode "muance.core/post-render expects a vnode.")
+   (-> (get-render-queue vnode)
+       (aget index-render-queue-post-render)
+       (.push #js [f])))
+  ([vnode f arg1]
+   (-> (get-render-queue vnode)
+       (aget index-render-queue-post-render)
+       (.push #js [f arg1])))
+  ([vnode f arg1 arg2]
+   (-> (get-render-queue vnode)
+       (aget index-render-queue-post-render)
+       (.push #js [f arg1 arg2])))
+  ([vnode f arg1 arg2 arg3]
+   (-> (get-render-queue vnode)
+       (aget index-render-queue-post-render)
+       (.push #js [f arg1 arg2 arg3]))))
 
 (defn vtree
   "Creates a new vtree. By default the vtree is rendered asynchronously. When async is false,
   the vtree is rendered synchronously."
   ([]
-   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js [true]))
+   (vtree true))
   ([async]
-   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []] #js [async])))
+   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []]
+           ;; async + post render hooks
+           #js [async #js []])))
 
 (defn patch
   "Patch a vtree using component. The optional third argument is the component props."
