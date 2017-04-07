@@ -59,7 +59,7 @@ See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/
 By default, Muance renders vtrees asynchronously, using [requestAnimationFrame](https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame).
 Rendering can be made synchronous by passing false to `muance.core/vtree`.
 
-It is posiible to register a function to be executed after the next 
+A function can be registered to be executed after the next 
 Muance render pass using the `(post-render vnode f arg1 arg2 arg3)` function.
 The `post-render` function takes a vnode or a vtree as first argument. The
 second argument is the function to be executed after the next render pass.
