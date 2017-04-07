@@ -4,6 +4,7 @@
             [goog.dom :as dom]
             [goog.object :as o]
             [muance.core :as m :include-macros true]
+            [muance.print :as mprint]
             [muance.utils-test :as utils])
   (:require-macros [muance.h :as h]))
 
@@ -313,7 +314,7 @@
 
 (comment
 
-  (cljs.pprint/pprint (utils/format-vtree @vtree))
-  (cljs.pprint/pprint (utils/format-render-queue @vtree))
+  (cljs.pprint/pprint (mprint/format-vtree @vtree))
+  (cljs.pprint/pprint (mprint/format-render-queue @vtree))
   
   )
