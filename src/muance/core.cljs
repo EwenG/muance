@@ -866,6 +866,9 @@
                   (aget 2))))
 
 (defn post-render
+  "Registers a function to be executed after the next Muance render pass. Takes a vnode or vtree,
+  the function to be executed and up to three optional parameters to be passed to the 
+  function f."
   ([vnode f]
    (assert vnode "muance.core/post-render expects a vnode.")
    (-> (get-render-queue vnode)
