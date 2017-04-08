@@ -148,24 +148,36 @@
              `(style ~(as-str k) ~v))))
        style))
 
+;; Wrap event handlers in a var when in dev compilation mode in order to enable the possibility
+;; to dynamically redefine event handler functions definition
+(defn- maybe-wrap-in-var [env f]
+  (if (and (-> @cljs.env/*compiler* :options :optimizations (= :none))
+           (symbol? f) (cljs-resolve env f))
+    `(cljs.core/Var. (cljs.core/fn [] ~f) ~f nil)
+    f))
+
 (defn- on-calls [env ons]
   (let [static? (partial static? env)
         ons (if (handler? ons) [ons] ons)]
     (map (fn [[k f & args]]
            (if (and (static? f) (every? static? args))
              (let [l (count args)]
-               (cond (= 0 l) `(on-static ~(as-str k) ~f)
-                     (= 1 l) `(on-static1 ~(as-str k) ~f ~(nth args 0))
-                     (= 2 l) `(on-static2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
-                     :else `(on-static3 ~(as-str k) ~f
+               (cond (= 0 l) `(on-static ~(as-str k) ~(maybe-wrap-in-var env f))
+                     (= 1 l) `(on-static1 ~(as-str k) ~(maybe-wrap-in-var env f)
+                                          ~(nth args 0))
+                     (= 2 l) `(on-static2 ~(as-str k) ~(maybe-wrap-in-var env f)
+                                          ~(nth args 0) ~(nth args 1))
+                     :else `(on-static3 ~(as-str k) ~(maybe-wrap-in-var env f)
                                         ~(nth args 0)
                                         ~(nth args 1)
                                         ~(nth args 2))))
              (let [l (count args)]
-               (cond (= 0 l) `(on ~(as-str k) ~f)
-                     (= 1 l) `(on1 ~(as-str k) ~f ~(nth args 0))
-                     (= 2 l) `(on2 ~(as-str k) ~f ~(nth args 0) ~(nth args 1))
-                     :else `(on3 ~(as-str k) ~f
+               (cond (= 0 l) `(on ~(as-str k) ~(maybe-wrap-in-var env f))
+                     (= 1 l) `(on1 ~(as-str k) ~(maybe-wrap-in-var env f)
+                                   ~(nth args 0))
+                     (= 2 l) `(on2 ~(as-str k) ~(maybe-wrap-in-var env f)
+                                   ~(nth args 0) ~(nth args 1))
+                     :else `(on3 ~(as-str k) ~(maybe-wrap-in-var env f)
                                  ~(nth args 0)
                                  ~(nth args 1)
                                  ~(nth args 2))))))
