@@ -87,13 +87,14 @@
   (when dirty-comps
     (let [l (.-length dirty-comps)]
       (loop [arr (transient [])
-             i 0]    
+             i 0]
         (if (< i l)
           (recur
            (-> arr
                (conj! (aget dirty-comps i))
-               (conj! (format-vnodes (aget dirty-comps (inc i)))))
-           (+ i 2))
+               (conj! (aget dirty-comps (inc i)))
+               (conj! (format-vnodes (aget dirty-comps (+ i 2)))))
+           (+ i 3))
           (persistent! arr))))))
 
 (defn format-vtree [vtree]
@@ -104,9 +105,7 @@
     (let [l (.-length render-queue)]
       (loop [arr (transient [])
              i 0]
-        (cond (= i 0)
-              (recur (conj! arr (aget render-queue 0)) (inc i))
-              (= i 1)
-              (recur (conj! arr (aget render-queue 1)) (inc i))
+        (cond (< i m/index-render-queue-offset)
+              (recur (conj! arr (aget render-queue i)) (inc i))
               (< i l) (recur (conj! arr (format-depth (aget render-queue i))) (inc i))
               :else (persistent! arr))))))

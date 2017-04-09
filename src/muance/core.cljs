@@ -44,6 +44,7 @@
 (def ^{:private true} index-render-queue-async 0)
 (def ^{:private true} index-render-queue-post-render 1)
 (def ^{:private true} index-render-queue-dirty-flag 2)
+(def ^{:private true} index-render-queue-offset 3)
 
 ;; The data needed in a local state watcher is stored on the local state itself, using this key.
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
@@ -185,10 +186,12 @@
           component-depth (aget vnode index-comp-data index-comp-data-depth)]
       (when (not (dirty-component? vnode))
         (aset (aget vnode index-comp-data) index-comp-data-dirty-flag true)
-        (if-let [dirty-comps (aget render-queue (inc component-depth))]
-          (do (.push dirty-comps comp-fn)
+        (if-let [dirty-comps (aget render-queue (+ component-depth index-render-queue-offset))]
+          (do (.push dirty-comps (aget vnode index-comp-props))
+              (.push dirty-comps comp-fn)
               (.push dirty-comps vnode))
-          (aset render-queue (inc component-depth) #js [comp-fn vnode]))
+          (aset render-queue (+ component-depth index-render-queue-offset)
+                #js [(aget vnode index-comp-props) comp-fn vnode]))
         (when-not (aget render-queue index-render-queue-dirty-flag)
           (aset render-queue index-render-queue-dirty-flag true)
           (if async
@@ -786,7 +789,7 @@
                               0)
             *component-depth* (if vnode
                                 (aget vnode index-comp-data index-comp-data-depth)
-                                1)
+                                0)
             *watch-local-state* false
             *components-queue-count* 0
             *render-queue* render-queue
@@ -815,18 +818,19 @@
 
 (defn- process-render-queue [render-queue]
   (let [l (.-length render-queue)]
-    (loop [i 3]
+    (loop [i index-render-queue-offset]
       (when (< i l)
         (when-let [dirty-comps (aget render-queue i)]
           (loop []
             (let [vnode (.pop dirty-comps)
-                  comp-fn (.pop dirty-comps)]
+                  comp-fn (.pop dirty-comps)
+                  props (.pop dirty-comps)]
               ;; stop when there is no more dirty component. A component can push itself in the
               ;; dirty comps (at the same depth, in a did-mount hook)
               (when (and vnode (dirty-component? vnode))
                 (patch-impl render-queue
                             (aget vnode index-parent-vnode) vnode
-                            comp-fn (aget vnode index-comp-props))
+                            comp-fn props)
                 (recur)))))
         (recur (inc i)))))
   (process-post-render-hooks render-queue)
@@ -834,22 +838,29 @@
 
 (defn- patch-root-impl [vtree patch-fn props]
   ;; On first render, render synchronously
+  ;; Otherwise, set the component at the top as dirty and update its props and patch-fn
   (let [vnode (.-vnode vtree)
         render-queue (.-render-queue vtree)
         async (aget render-queue index-render-queue-async)
         children (aget vnode index-children)]
     (if-let [comp (aget children 0)]
-      (do (aset render-queue index-render-queue-dirty-flag true)
+      (do
+        (if-let [dirty-comps (aget render-queue index-render-queue-offset)]
+          (do
+            (aset dirty-comps 0 props)
+            (aset dirty-comps 1 patch-fn)
+            (aset dirty-comps 2 comp))
+          (aset render-queue index-render-queue-offset #js [props patch-fn comp]))
+        (aset (aget comp index-comp-data) index-comp-data-dirty-flag true)
+        (when-not (aget render-queue index-render-queue-dirty-flag)
+          (aset render-queue index-render-queue-dirty-flag true)
           (if async
             (.requestAnimationFrame js/window
-                                    (fn []
-                                      (patch-impl render-queue vnode comp patch-fn props)
-                                      (process-render-queue render-queue)))
-            (do
-              (patch-impl render-queue vnode comp patch-fn props)
-              (process-render-queue render-queue))))
-      (do (patch-impl render-queue vnode nil patch-fn props)
-          (process-post-render-hooks render-queue)))))
+                                    (fn [] (process-render-queue render-queue)))
+            (process-render-queue render-queue))))
+      (do
+        (patch-impl render-queue vnode nil patch-fn props)
+        (process-post-render-hooks render-queue)))))
 
 (deftype VTree [vnode render-queue])
 
