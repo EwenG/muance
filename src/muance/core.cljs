@@ -681,7 +681,8 @@
             (handle-event-handlers prev-attrs *attrs-count* key handler f)
             (aset prev-attrs (+ *attrs-count* 2) param1)
             (aset prev-attrs (+ *attrs-count* 3) param2)
-            (aset prev-attrs (+ *attrs-count* 4) param3)))))
+            (aset prev-attrs (+ *attrs-count* 4) param3)))
+    (set! *attrs-count* (+ *attrs-count* param-count))))
 
 (defn- on [key f]
   (on-impl key f nil nil nil 0))
