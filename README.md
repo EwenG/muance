@@ -16,6 +16,8 @@ Muance does not recreate a new virtual DOM on every render, which may reduce the
 
 Muance size is around 8k when minified, before gzip.
 
+Muance is compatible with IE10+ and requires [requestAnimationFrame](https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame) to be polyfilled for IE9.
+
 [Here](https://eweng.github.io/muance/examples/dbmonster/public/) is a dbmonster implementation using Muance.
 
 ## Quick start
