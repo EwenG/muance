@@ -295,7 +295,7 @@
             (~name nil)))
        (~(if params-with-props [key-sym params-with-props] [key-sym])
         (cljs.core/let [parent-component# *component*
-                        hooks# (goog.object/get ~name hooks-key)]
+                        hooks# (goog.object/get comp-hooks ~(str ana/*cljs-ns* "/" name))]
           (open-comp ~(str ana/*cljs-ns* "/" name)
                      ~typeid ~(boolean params-with-props)
                      ~(when params-with-props props-sym)
@@ -304,31 +304,25 @@
             ~@body)
           (close-comp parent-component# hooks#))))))
 
-(defn- assert-component [env component msg]
-  (let [_ (assert (symbol? component) msg)
-        resolved (cljs-resolve env component)
-        comp-ns (and resolved (symbol (namespace resolved)))
-        comp-sym (and resolved (symbol (name resolved)))
-        _ (assert (and comp-ns comp-sym) msg)
-        var-map (get-in @cljs.env/*compiler* [::ana/namespaces comp-ns :defs comp-sym])]
-    (assert (get-in var-map [:meta ::component]) msg)))
-
 (defmacro hooks
   "Attaches a set of lifecycle hooks to a Muance component. hooks-map must be a literal map of
   lifecycle hooks."
   [component hooks-map]
-  (assert-component
-   &env component "muance.core/hooks first parameter must be a component")
-  (assert (map? hooks-map))
-  (let [{will-update :will-update will-unmount :will-unmount
-         did-mount :did-mount did-update :did-update
-         will-receive-props :will-receive-props
-         get-initial-state :get-initial-state :as attrs} hooks-map]
-    `(goog.object/set
-      ~component
-      hooks-key
-      (cljs.core/array ~get-initial-state ~will-receive-props
-                       ~did-mount ~did-update ~will-unmount ~will-update))))
-
-
-
+  (let [not-a-comp-msg "muance.core/hooks first parameter must be a component"
+        _ (assert (symbol? component) not-a-comp-msg)
+        resolved (cljs-resolve &env component)
+        comp-ns (and resolved (symbol (namespace resolved)))
+        comp-sym (and resolved (symbol (name resolved)))
+        _ (assert (and comp-ns comp-sym) not-a-comp-msg)
+        var-map (get-in @cljs.env/*compiler* [::ana/namespaces comp-ns :defs comp-sym])]
+    (assert (get-in var-map [:meta ::component]) not-a-comp-msg)
+    (assert (map? hooks-map))
+    (let [{will-update :will-update will-unmount :will-unmount
+           did-mount :did-mount did-update :did-update
+           will-receive-props :will-receive-props
+           get-initial-state :get-initial-state :as attrs} hooks-map]
+      `(goog.object/set
+        comp-hooks
+        ~(str comp-ns "/" comp-sym)
+        (cljs.core/array ~get-initial-state ~will-receive-props
+                         ~did-mount ~did-update ~will-unmount ~will-update)))))

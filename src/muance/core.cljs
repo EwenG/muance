@@ -543,8 +543,6 @@
           (remove-vnode-key prev prev-key)
           (when prev (remove-node prev)))))))
 
-(def ^{:private true} hooks-key "muance.core/hooks")
-
 (def ^{:private true} index-hooks-get-initial-state 0)
 (def ^{:private true} index-hooks-will-receive-props 1)
 (def ^{:private true} index-hooks-did-mount 2)
@@ -898,6 +896,8 @@
    (-> (get-render-queue vnode)
        (aget index-render-queue-post-render)
        (.push #js [f arg1 arg2 arg3]))))
+
+(defonce ^{:private true} comp-hooks (js-obj))
 
 (defn vtree
   "Creates a new vtree. By default the vtree is rendered asynchronously. When async is false,
