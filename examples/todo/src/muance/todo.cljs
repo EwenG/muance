@@ -89,7 +89,7 @@
 
 (defn todo-edit [title id]
   (h/input :class "edit"
-           :type "text" :value (:val m/*state*)
+           :type "text" :value (str (:val m/*state*))
            ::m/on [[:input edit-changed]
                    [:keydown edit-keydown id]
                    [:blur edit-save id]]
