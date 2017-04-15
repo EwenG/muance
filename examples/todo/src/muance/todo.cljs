@@ -182,12 +182,10 @@
 (defonce todo-state (atom init-state))
 
 (defonce css-vtree (m/vtree))
-(m/remove css-vtree)
 (m/append-child css-vtree (.-head js/document))
 (m/patch css-vtree css)
 
 (defonce vtree (m/vtree))
-(m/remove vtree)
 (m/append-child vtree (.-body js/document))
 (m/patch vtree todo-app @todo-state)
 
