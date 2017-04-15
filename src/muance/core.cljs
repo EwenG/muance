@@ -68,6 +68,8 @@
 ;; Whether to skip a component body or not, depending on whether its props and state has changed
 ;; or not
 (def ^{:dynamic true :private true} *skip* nil)
+;; When true, components always render, even if props or state did not change
+(def ^{:dynamic true :private true} *force-render* nil)
 ;; component-depth is used to be able to always render components top -> down. Rendering
 ;; components top->down avoids unecessary diffing sometimes
 (def ^{:dynamic true :private true} *component-depth* nil)
@@ -605,7 +607,8 @@
         (if (and 
              (identical? prev-props *props*)
              (identical? prev-state state)
-             (nil? *moved-vnode*))
+             (nil? *moved-vnode*)
+             (not *force-render*))
           (set! *skip* true)
           (do
             (call-will-receive-props prev-props *props* state-ref will-receive-props)
@@ -768,7 +771,7 @@
     (recur (- i 2))))
 
 ;; vnode is nil on first render
-(defn- patch-impl [render-queue parent-vnode vnode patch-fn maybe-props]
+(defn- patch-impl [render-queue parent-vnode vnode patch-fn maybe-props force-render]
   (set! moved-flag #js [])
   (if vnode
     (aset parent-vnode index-children-count
@@ -783,6 +786,7 @@
             *moved-vnode* nil
             *vnode-to-remove* nil
             *skip* false
+            *force-render* force-render
             *svg-namespace* (if vnode
                               (aget vnode index-comp-data index-comp-data-svg-namespace)
                               0)
@@ -829,7 +833,7 @@
               (when (and vnode (dirty-component? vnode))
                 (patch-impl render-queue
                             (aget vnode index-parent-vnode) vnode
-                            comp-fn props)
+                            comp-fn props false)
                 (recur)))))
         (recur (inc i)))))
   (process-post-render-hooks render-queue)
@@ -858,10 +862,11 @@
                                     (fn [] (process-render-queue render-queue)))
             (process-render-queue render-queue))))
       (do
-        (patch-impl render-queue vnode nil patch-fn props)
+        (patch-impl render-queue vnode nil patch-fn props false)
         (process-post-render-hooks render-queue)))))
 
-(deftype VTree [vnode render-queue])
+;; id is used to keep track of rendered vtrees, for re-rendering on function/component reload
+(deftype VTree [vnode render-queue id])
 
 (defn- get-render-queue [vnode]
   (cond (instance? VTree vnode)
@@ -899,15 +904,41 @@
 
 (defonce ^{:private true} comp-hooks (js-obj))
 
+(defonce ^{:private true} vtree-ids (volatile! 0))
+(defonce ^{:private true} roots #js {})
+
+(defn- new-root-vnode []
+  #js [nil nil (.createDocumentFragment js/document) nil 0 #js []])
+
+(defn- get-comp-render-fn [comp]
+  (-> comp
+      (aget index-comp-data index-comp-data-state-ref)
+      (o/get vnode-stateful-key)
+      (aget 1)))
+
+(defn- refresh-root [vtree id roots]
+  (let [vnode (.-vnode vtree)
+        render-queue (.-render-queue vtree)
+        children (aget vnode index-children)]
+    (when-let [comp (aget children 0)]
+      (patch-impl render-queue vnode comp
+                  (get-comp-render-fn comp)
+                  (aget comp index-comp-props)
+                  true))))
+
+(defn- refresh-roots []
+  (o/forEach roots refresh-root))
+
 (defn vtree
   "Creates a new vtree. By default the vtree is rendered asynchronously. When async is false,
   the vtree is rendered synchronously."
   ([]
    (vtree true))
   ([async]
-   (VTree. #js [nil nil (.createDocumentFragment js/document) nil 0 #js []]
+   (VTree. (new-root-vnode)
            ;; async + post render hooks
-           #js [async #js []])))
+           #js [async #js []]
+           (vswap! vtree-ids inc))))
 
 (defn patch
   "Patch a vtree using component. The optional third argument is the component props."
@@ -922,7 +953,8 @@
         fragment (.createDocumentFragment js/document)]
     (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* fragment comp nil))
-    (aset vnode index-node fragment)))
+    (aset vnode index-node fragment)
+    (o/remove roots (.-id vtree))))
 
 (defn insert-before [vtree ref-node]
   "Inserts the DOM node(s) associated with vtree in the DOM, before ref-node."
@@ -930,7 +962,8 @@
         vnode (.-vnode vtree)]
     (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* parent-node comp ref-node))
-    (aset vnode index-node parent-node)))
+    (aset vnode index-node parent-node)
+    (o/set roots (.-id vtree) vtree)))
 
 (defn append-child [vtree parent-node]
   "Inserts the DOM node(s) associated with vtree in the DOM, as the last child(ren) of 
@@ -938,7 +971,8 @@ parent-node."
   (let [vnode (.-vnode vtree)]
     (when-let [comp (aget vnode index-children 0)]
       (insert-vnode-before* parent-node comp nil))
-    (aset vnode index-node parent-node)))
+    (aset vnode index-node parent-node)
+    (o/set roots (.-id vtree) vtree)))
 
 ;; node identity is the same implies that the svg-namespace value did not change
 

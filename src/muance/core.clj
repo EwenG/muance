@@ -1,6 +1,7 @@
 (ns muance.core
-  (:require [cljs.analyzer :as ana]
-            [clojure.string :as string])
+  (:require [clojure.string :as string]
+            [cljs.analyzer :as ana]
+            [cljs.repl])
   (:import [cljs.tagged_literals JSValue]))
 
 (defonce typeid (atom 1))
@@ -272,9 +273,20 @@
                         [(conj params [:as props-sym]) props-sym])
         :else nil))
 
+(defn- refresh-roots [repl-env compiler-env]
+  (cljs.repl/-evaluate
+   repl-env "<cljs repl>" 1
+   "muance.core.refresh_roots();"))
+
+;; The comp-fn does not need to be a var in order to support reloading because of the level
+;; of indirection intriduced by variadic arity functions
+;; Although it would be better for comp-fn to be a var to avoid relying on clojurescript inernals 
 (defmacro defcomp
   "Define a Muance stateful component. A Muance component takes zero or one argument."
   [name docstring-or-params & params-body]
+  (when (-> @cljs.env/*compiler* :options :optimizations (= :none))
+    (swap! cljs.env/*compiler* update :replique/ns-watches
+           assoc ana/*cljs-ns* refresh-roots))
   (swap! comp-typeid dec-comp-typeid)
   (let [typeid @comp-typeid
         name (if (string? docstring-or-params)
