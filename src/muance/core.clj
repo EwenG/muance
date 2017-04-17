@@ -267,11 +267,21 @@
 
 (defn- params-with-props [params]
   (cond (symbol? params) [params params]
-        (vector? params) (let [props-sym (gensym "props")]
-                           [(conj params :as props-sym) props-sym])
-        (map? params) (let [props-sym (gensym "props")]
-                        [(conj params [:as props-sym]) props-sym])
+        (vector? params) (let [as-index (.indexOf params :as)
+                               props-sym (if (not= -1 as-index)
+                                           (get params (inc as-index))
+                                           (gensym "props"))
+                               params (if (= -1 as-index) (conj params :as props-sym) params)]
+                           [params props-sym])
+        (map? params) (let [props-sym (or (:as params) (gensym "props"))
+                            params (if (:as params) params (conj params [:as props-sym]))]
+                        [params props-sym])
         :else nil))
+
+(comment
+  (params-with-props '[1 2 :as kk])
+  (params-with-props '{e :e :as ff})
+  )
 
 (defn- refresh-roots [repl-env compiler-env]
   (cljs.repl/-evaluate
