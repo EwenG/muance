@@ -207,7 +207,8 @@ They expect the current virtual node, which is bound to the `muance.core/*vnode*
   ```
   
  - `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation](#child-nodes-reconciliation).
-
+ - `(muance.core/set-timeout vnode f millis)`: Execute f after a delay expressed in milliseconds. The first argument of f is the local state reference of the vnode component.
+ - `(muance.core/set-interval vnode f millis)`: Periodically execute f. The period is expressed in milliseconds. The first argument of f is the local state reference of the vnode component.
 
 ### Text nodes
 

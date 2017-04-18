@@ -173,8 +173,7 @@
   (aget vnode index-key))
 
 (defn set-timeout
-  "Execute the f function in millis milliseconds. f will receive the state of the node's 
-  component as first parameter."
+  "Execute f after a delay expressed in milliseconds. The first argument of f is the local state reference of the vnode component."
   [vnode f millis]
   (assert vnode "muance.core/set-timeout expects a vnode.")
   (let [component (if (component? vnode) vnode (aget vnode index-component))
@@ -182,8 +181,7 @@
     (.setTimeout js/window (fn [] (f state-ref)) millis)))
 
 (defn set-interval
-  "Execute the f function every millis milliseconds. f will receive the state of the node's 
-  component as first parameter."
+  "Periodically execute f. The period is expressed in milliseconds. The first argument of f is the local state reference of the vnode component."
   [vnode f millis]
   (assert vnode "muance.core/set-timeout expects a vnode.")
   (let [component (if (component? vnode) vnode (aget vnode index-component))
