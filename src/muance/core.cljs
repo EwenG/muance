@@ -284,8 +284,8 @@
               *prevent-node-removal* false]
       (call-unmounts queue-start)
       (set! *vnode* current-vnode)
-      (when-not *prevent-node-removal*
-          (remove-real-node vnode)))))
+      (when (or *force-render* (not *prevent-node-removal*))
+        (remove-real-node vnode)))))
 
 (defn- clean-keymap [vnode]
   (let [keymap-invalid (or (aget vnode index-keymap-invalid) 0)]
