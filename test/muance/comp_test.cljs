@@ -89,10 +89,10 @@
 
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
-       ::m/hooks {:did-mount (fn [props state-ref]
+       ::m/hooks {:did-mount (fn [props state]
                                (prn "did-mount-inner")
                                (prn :props props)
-                               (prn :state-ref state-ref)
+                               (prn :state state)
                                (prn :component-name (m/component-name m/*vnode*))
                                (prn :node (m/dom-node m/*vnode*)))
                   :will-update (fn [props state]
@@ -115,10 +115,10 @@
        (m/text props)))
 
 (m/hooks comp-attributes-props
-         {:did-mount (fn [props state-ref]
+         {:did-mount (fn [props state]
                        (prn "did-mount")
                        (prn :props props)
-                       (prn :state-ref state-ref)
+                       (prn :state state)
                        (prn :component-name (m/component-name m/*vnode*))
                        (prn :nodes (m/dom-nodes m/*vnode*)))
           :will-update (fn [props state]
@@ -200,11 +200,10 @@
                                0)
           :will-receive-props (fn [prev-props props state]
                                 (reset! state (:depth1 props)))
-          :did-mount (fn [props state-ref]
+          :did-mount (fn [props state]
                        (let [node (m/dom-node m/*vnode*)]
-                         (swap! state-ref inc)
                          (o/set node (m/component-name m/*vnode*)
-                                (.setInterval js/window #(swap! state-ref inc) 1000))))
+                                (m/set-interval m/*vnode* #(swap! % inc) 1000))))
           :will-unmount (fn [props state]
                           (let [node (m/dom-node m/*vnode*)
                                 interval-id (o/get node (m/component-name m/*vnode*))]
@@ -278,33 +277,14 @@
 
 
 
-(m/defcomp comp-render-queue-same-depth-f [b]
-  (prn "rendering")
-  (if b
-    (h/p (m/text m/*state*))
-    (do (h/p
-         ::m/hooks {:did-mount (fn [props state-ref] (swap! state-ref inc))}
-         (m/text m/*state*))
-        (h/p
-         ::m/hooks {:did-mount (fn [props state-ref] (swap! state-ref inc))}
-         (m/text m/*state*)))))
-
-(deftest comp-render-queue-same-depth []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-render-queue-same-depth-f false))
-
-
-
-
 (m/defcomp comp-prevent-node-removal-f [b]
   (if b
     (h/div
      ::m/hooks {:will-unmount (fn [props state]
                                 (let [node (m/prevent-node-removal)]
-                                  (.setTimeout js/window
-                                               (fn [] (m/remove-dom-node node))
-                                               3000)))})
+                                  (m/set-timeout m/*vnode*
+                                                 (fn [state-ref] (m/remove-dom-node node))
+                                                 3000)))})
     (h/p)))
 
 (deftest comp-prevent-node-removal []

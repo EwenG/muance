@@ -172,6 +172,24 @@
   (assert vnode "muance.core/key expects a vnode.")
   (aget vnode index-key))
 
+(defn set-timeout
+  "Execute the f function in millis milliseconds. f will receive the state of the node's 
+  component as first parameter."
+  [vnode f millis]
+  (assert vnode "muance.core/set-timeout expects a vnode.")
+  (let [component (if (component? vnode) vnode (aget vnode index-component))
+        state-ref (aget component index-comp-data index-comp-data-state-ref)]
+    (.setTimeout js/window (fn [] (f state-ref)) millis)))
+
+(defn set-interval
+  "Execute the f function every millis milliseconds. f will receive the state of the node's 
+  component as first parameter."
+  [vnode f millis]
+  (assert vnode "muance.core/set-timeout expects a vnode.")
+  (let [component (if (component? vnode) vnode (aget vnode index-component))
+        state-ref (aget component index-comp-data index-comp-data-state-ref)]
+    (.setInterval js/window (fn [] (f state-ref)) millis)))
+
 (defn- remove-vnode-key [vnode key]
   (let [parent (aget vnode index-parent-vnode)]
     (aset vnode index-key-moved moving-flag)
@@ -765,9 +783,9 @@
     (let [vnode (aget components-queue i)
           component (if (component? vnode) vnode (aget vnode index-component))
           props (aget component index-comp-props)
-          state-ref (aget component index-comp-data index-comp-data-state-ref)]
+          state (aget component index-comp-state)]
       (set! *vnode* vnode)
-      ((aget components-queue (dec i)) props state-ref))
+      ((aget components-queue (dec i)) props state))
     (recur (- i 2))))
 
 ;; vnode is nil on first render
@@ -820,6 +838,7 @@
     (aset render-queue index-render-queue-post-render #js [])))
 
 (defn- process-render-queue [render-queue]
+  (aset render-queue index-render-queue-dirty-flag nil)
   (let [l (.-length render-queue)]
     (loop [i index-render-queue-offset]
       (when (< i l)
@@ -828,16 +847,14 @@
             (let [vnode (.pop dirty-comps)
                   comp-fn (.pop dirty-comps)
                   props (.pop dirty-comps)]
-              ;; stop when there is no more dirty component. A component can push itself in the
-              ;; dirty comps (at the same depth, in a did-mount hook)
+              ;; stop when there is no more dirty component
               (when (and vnode (dirty-component? vnode))
                 (patch-impl render-queue
                             (aget vnode index-parent-vnode) vnode
                             comp-fn props false)
                 (recur)))))
         (recur (inc i)))))
-  (process-post-render-hooks render-queue)
-  (aset render-queue index-render-queue-dirty-flag nil))
+  (process-post-render-hooks render-queue))
 
 (defn- patch-root-impl [vtree patch-fn props]
   ;; On first render, render synchronously

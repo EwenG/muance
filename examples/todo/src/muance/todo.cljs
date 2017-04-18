@@ -84,7 +84,7 @@
     27 (swap! state-ref assoc :editing false)
     nil))
 
-(defn focus-node [props state-ref]
+(defn focus-node [props state]
   (.focus (m/dom-node m/*vnode*)))
 
 (defn todo-edit [title id]

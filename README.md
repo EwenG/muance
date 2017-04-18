@@ -343,15 +343,15 @@ Called after the component or node has been created and attached to the DOM.
 Parents `did-mount` hooks are called *before* their children's.
 
 ```
-(m/h ::m/hooks {:did-mount (fn [props state-ref]))})
+(m/h ::m/hooks {:did-mount (fn [props state]))})
 ```
 
 ```
-(m/hooks foo-component {:did-mount (fn [props state-ref])})
+(m/hooks foo-component {:did-mount (fn [props state])})
 ```
 
 - `props`: the props of the node's component
-- `state-ref`: the local state of the node's component (an atom) 
+- `state`: the local state value of the node's component'
 
 #### will-update
 
