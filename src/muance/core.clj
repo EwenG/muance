@@ -48,15 +48,15 @@
         :else form))
 
 (defn- local-dep [{name :name fn-var :fn-var
-                  local :local init :init
-                  op :op tag :tag dynamic :dynamic
-                  ns :ns :as info}]
+                   local :local init :init
+                   op :op tag :tag dynamic :dynamic
+                   ns :ns :as info}]
   (cond
     ;; fn param
     (and (= :var op) (not local) (not fn-var))
     info
-    ;; local state
-    (and (= name 'muance.core/*state*) (= dynamic true) (= ns 'muance.core))
+    ;; dynamic var
+    dynamic
     info
     ;; The analyzed var is a local var with an initial binding. The
     ;; initial binding may itself depend on a function parameter,
@@ -131,7 +131,10 @@
 (defn- class-call [env class]
   (if (vector? class)
     (if (every? (partial static? env) class)
-      `(prop-static "className" ~(reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class))
+      (if (some symbol? class)
+        (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
+          `(prop-static "className" (cljs.core/str ~@classes-with-spaces)))
+        `(prop-static "className" ~(reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class)))
       (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
         `(prop "className" (cljs.core/str ~@classes-with-spaces))))
     (if (static? env class)
