@@ -606,7 +606,8 @@
         will-unmount (when hooks (aget hooks index-hooks-will-unmount))
         will-update (when hooks (aget hooks index-hooks-will-update))
         will-receive-props (when hooks (aget hooks index-hooks-will-receive-props))
-        prev (open-impl nil typeid key vnode-index)]
+        prev (open-impl nil typeid key vnode-index)
+        vnode *vnode*]
     (set! *props* props)
     (when (not= (aget *vnode* index-unmount) will-unmount)
       (aset *vnode* index-unmount will-unmount))
@@ -631,7 +632,9 @@
         ;; call get-initial-state at the end to keep things consistent in case of an exception
         ;; in get-initial-state
         (if get-initial-state
-          (do (reset! state-ref (get-initial-state *props*))
+          (do (set! *vnode* nil)
+              (reset! state-ref (get-initial-state *props*))
+              (set! *vnode* vnode)
               (set! *state* @state-ref)
               (aset *vnode* index-comp-state *state*))
           (do (set! *state* nil)
