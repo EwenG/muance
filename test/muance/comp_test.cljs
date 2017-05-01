@@ -5,7 +5,10 @@
             [goog.object :as o]
             [muance.core :as m :include-macros true]
             [muance.print :as mprint]
-            [muance.utils-test :as utils])
+            [muance.utils-test :as utils]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop :include-macros true])
   (:require-macros [muance.h :as h]))
 
 (defonce vtree (atom nil))
@@ -80,6 +83,113 @@
   (m/append-child @vtree (utils/new-root))
   (m/patch @vtree comp-keyed-f {:keys (get keys-vec 0) :props "comp-props4"})
   )
+
+
+
+
+
+
+
+
+
+
+
+(defn set-key-prop [type]
+  (fn []
+    (let [nodes (array-seq (m/dom-nodes m/*vnode*) 0)]
+      (doseq [node nodes]
+        (let [k (m/key m/*vnode*)]
+          (o/set node "keyedKey" k)
+          (o/set node "keyedType" type))))))
+
+(m/defcomp comp-keyed-generative-no-child [])
+
+(m/hooks comp-keyed-generative-no-child {:did-mount (set-key-prop 1)
+                                      :did-update (set-key-prop 1)})
+
+(m/defcomp comp-keyed-generative-child [k]
+  (h/div :class k))
+
+(m/hooks comp-keyed-generative-child {:did-mount (set-key-prop 2)
+                                      :did-update (set-key-prop 2)})
+
+(m/defcomp comp-keyed-generative-children [k]
+  (h/div :class k)
+  (h/div :class k))
+
+(m/hooks comp-keyed-generative-children {:did-mount (set-key-prop 3)
+                                         :did-update (set-key-prop 3)})
+
+(m/defcomp comp-keyed-generative-f [keys-seq]
+  (h/div :class ["reorder"]
+   (doseq [[type k] keys-seq]
+     (cond (= 0 type)
+           (if k
+             (h/div :class k
+                    ::m/key k
+                    ::m/hooks {:did-mount (set-key-prop 0)
+                               :did-update (set-key-prop 0)})
+             (h/div ::m/hooks {:did-mount (set-key-prop 0)
+                               :did-update (set-key-prop 0)}))
+           (= 1 type)
+           (if k
+             (comp-keyed-generative-no-child k)
+             (comp-keyed-generative-no-child))
+           (= 2 type)
+           (if k
+             (comp-keyed-generative-child k k)
+             (comp-keyed-generative-child nil))
+           (= 3 type)
+           (if k
+             (comp-keyed-generative-children k k)
+             (comp-keyed-generative-children nil))
+           (= 4 type)
+           (m/text "ee")))))
+
+(def keyed-generator
+  (gen/list
+   (gen/fmap
+    (fn [keys-seq]
+      (map (fn [k]
+             (let [type (rand-int 5)]
+               [type (when (and k (not (= 4 type))) (str k))]))
+           keys-seq))
+    (gen/set (gen/frequency [[10 (gen/choose 1 21)]
+                             [1 (gen/return nil)]])))))
+
+(defn keyed-expected [[t k :as x]]
+  (cond (= 1 t) []
+        (= 3 t) [x x]
+        :else [x]))
+
+(defn keyed-result [node]
+  (if (= 3 (.-nodeType node))
+    [4 nil]
+    [(o/get node "keyedType") (o/get node "keyedKey")]))
+
+(def comp-keyed-generative
+    (prop/for-all [keyed-seq keyed-generator]
+                  (reset! vtree (m/vtree false))
+                  (m/append-child @vtree (utils/new-root))
+                  (loop [[keys-seq & rest-keyed] keyed-seq]
+                    (if keys-seq
+                      (let [expected (mapcat keyed-expected keys-seq)]
+                        (m/patch @vtree comp-keyed-generative-f keys-seq)
+                        (let [reorder-node (.querySelector js/document ".reorder")
+                              nodes (array-seq (.-childNodes reorder-node) 0)
+                              result (map keyed-result nodes)]
+                          (if (= expected result)
+                            (recur rest-keyed)
+                            false)))
+                      true))))
+
+(comment
+
+  
+  (tc/quick-check 10 comp-keyed-generative)
+  )
+
+
 
 
 
