@@ -40,9 +40,12 @@ The following code snippet creates a component and renders it on the page:
 
 Muance API is defined in the `muance.core` namespace. HTML tag names are defined in the `muance.h` namespace.
 
-## Todo app
+## Examples
 
-See the [todo app example](https://github.com/EwenG/muance/tree/master/examples/todo).
+Source code for the examples is in the [examples](https://github.com/EwenG/muance/tree/master/examples/) directory.
+
+- [todo app](https://eweng.github.io/muance/examples/todo/public/)
+
 
 ## Top level API
 
