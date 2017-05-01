@@ -64,7 +64,7 @@
     nil))
 
 (m/defcomp todo-input []
-  (h/input :id "new-todo" :placeholder "What needs to be done?"
+  (h/input :class "new-todo" :placeholder "What needs to be done?" :autofocus true
            :type "text" :value m/*state*
            ::m/on [[:input input-changed]
                    [:keydown input-keydown]
@@ -105,20 +105,19 @@
    (m/text text)))
 
 (m/defcomp todo-stats [{:keys [filt active done]}]
-  (h/div
-   (h/span
-    :id "todo-count"
-    (h/strong (m/text active))
-    (m/text " " (case active 1 "item" "items") " left"))
-   (h/ul
-    :id "filters"
-    (h/li (todo-stats-link filt :all "All"))
-    (h/li (todo-stats-link filt :active "Active"))
-    (h/li (todo-stats-link filt :done "Completed")))
-   (when (pos? done)
-     (h/button
-      :id "clear-completed"
-      ::m/on [:click clear-done] (m/text "Clear completed " done)))))
+  (h/span
+   :class "todo-count"
+   (h/strong (m/text active))
+   (m/text " " (case active 1 "item" "items") " left"))
+  (h/ul
+   :class "filters"
+   (h/li (todo-stats-link filt :all "All"))
+   (h/li (todo-stats-link filt :active "Active"))
+   (h/li (todo-stats-link filt :done "Completed")))
+  (when (pos? done)
+    (h/button
+     :class "clear-completed"
+     ::m/on [:click clear-done] (m/text "Clear completed " done))))
 
 (defn set-editing [e state-ref b]
   (swap! state-ref assoc :editing b))
@@ -148,32 +147,30 @@
   (let [items (vals items)
         done (->> items (filter :done) count)
         active (- (count items) done)]
-    (h/div
-     (h/section
-      :id "todoapp"
-      (h/header
-       :id "header"
-       (h/h1 "todos")
-       (todo-input)
-       (when (-> items count pos?)
-         (h/div
-          (h/section
-           :id "main"
-           (h/input
-            :id "toggle-all" :type "checkbox" :checked (zero? active)
-            ::m/on [:change complete-all-hanlder (pos? active)])
-           (h/label :for "toggle-all" "Mark all as complete")
-           (h/ul
-            :id "todo-list"
-            (doseq [todo items
-                    :when (display-item? todo filt)]
-              (todo-item (:id todo) todo))))
-          (h/footer
-           :id "footer"
-           (todo-stats {:active active :done done :filt filt}))))))
-     (h/footer
-      :id "info"
-      (h/p "Double-click to edit a todo")))))
+    (h/section
+     :class "todoapp"
+     (h/header
+      :class "header"
+      (h/h1 "todos")
+      (todo-input)
+      (when (-> items count pos?)
+        (h/section
+         :class "main"
+         (h/input
+          :id "toggle-all" :class "toggle-all" :type "checkbox" :checked (zero? active)
+          ::m/on [:change complete-all-hanlder (pos? active)])
+         (h/label :for "toggle-all" "Mark all as complete")
+         (h/ul
+          :class "todo-list"
+          (doseq [todo items
+                  :when (display-item? todo filt)]
+            (todo-item (:id todo) todo))))
+        (h/footer
+         :class "footer"
+         (todo-stats {:active active :done done :filt filt})))))
+    (h/footer
+     :class "info"
+     (h/p "Double-click to edit a todo"))))
 
 (def init-state {:counter 0
                  :items (sorted-map)
