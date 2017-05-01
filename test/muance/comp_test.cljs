@@ -208,13 +208,11 @@
                   :will-update (fn [props state]
                                  (prn "will-update-inner")
                                  (prn :props props)
-                                 (prn :state state)
-                                 (prn (m/moving? m/*vnode*)))
+                                 (prn :state state))
                   :did-update (fn [props state]
                                 (prn "did-update-inner")
                                 (prn :props props)
-                                (prn :state state)
-                                (prn (m/moving? m/*vnode*)))
+                                (prn :state state))
                   :will-unmount (fn [props state]
                                   (prn "will-unmount-inner")
                                   (prn :props props)
@@ -234,13 +232,11 @@
           :will-update (fn [props state]
                          (prn "will-update")
                          (prn :props props)
-                         (prn :state state)
-                         (prn (m/moving? m/*vnode*)))
+                         (prn :state state))
           :did-update (fn [props state]
                         (prn "did-update")
                         (prn :props props)
-                        (prn :state state)
-                        (prn (m/moving? m/*vnode*)))
+                        (prn :state state))
           :will-unmount (fn [props state]
                           (prn "will-unmount")
                           (prn :props props)
