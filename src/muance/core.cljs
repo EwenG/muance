@@ -893,6 +893,7 @@
         render-queue (.-render-queue vtree)
         async (aget render-queue index-render-queue-async)
         children (aget vnode index-children)]
+        ;; comp is nil on first render
     (if-let [comp (aget children 0)]
       (do
         (if-let [dirty-comps (aget render-queue index-render-queue-offset)]
