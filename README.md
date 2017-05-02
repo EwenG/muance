@@ -388,7 +388,7 @@ Called after the node or component is updated.
 #### will-unmount
 
 Called before the component or node is removed from the DOM. 
-Parents `will-mount` hooks are called *after* their children's.
+Parents `will-unmount` hooks are called *after* their children's.
 
 ```
 (m/h ::m/hooks {:will-unmount (fn [props state]))})
