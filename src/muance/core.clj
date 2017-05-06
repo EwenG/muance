@@ -241,11 +241,12 @@
   (let [compile-form (partial compile-form env)
         {key ::key
          {will-update :will-update will-unmount :will-unmount
+          remove-hook :remove-hook
           did-mount :did-mount did-update :did-update} ::hooks :as attrs} (attributes body)
         _ (validate-attributes attrs)
         body (body-without-attributes body attrs)]
     (with-svg-namespace tag
-      `((open ~tag ~typeid ~key ~will-update ~will-unmount)
+      `((open ~tag ~typeid ~key ~will-update ~will-unmount ~remove-hook)
         ~@(attribute-calls env tag attrs)
         ~@(map compile-form body)
         (close ~did-mount ~did-update)))))
@@ -343,6 +344,7 @@
     (assert (get-in var-map [:meta ::component]) not-a-comp-msg)
     (assert (map? hooks-map))
     (let [{will-update :will-update will-unmount :will-unmount
+           remove-hook :remove-hook
            did-mount :did-mount did-update :did-update
            will-receive-props :will-receive-props
            get-initial-state :get-initial-state :as attrs} hooks-map]
@@ -350,4 +352,5 @@
         comp-hooks
         ~(str comp-ns "/" comp-sym)
         (cljs.core/array ~get-initial-state ~will-receive-props
-                         ~did-mount ~did-update ~will-unmount ~will-update)))))
+                         ~did-mount ~did-update ~will-unmount
+                         ~remove-hook ~will-update)))))

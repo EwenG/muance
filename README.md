@@ -401,6 +401,32 @@ Parents `will-unmount` hooks are called *after* their children's.
 - `props`: the props of the node's component
 - `state`: the local state value of the node's component
 
+#### remove-hook
+
+Animating the removal of a DOM node requires the DOM node to be kept 
+in the DOM for the duration of the animation. Use this hook to prevent
+from Muance to remove a DOM node. Removing the DOM node is left as the developer
+responsability.
+
+```
+(m/h ::m/hooks {:remove-hooks (fn [rem-node]))})
+```
+
+```
+(m/hooks foo-component {:remove-hooks (fn [rem-node]))})
+```
+
+- `rem-node`: The DOM node that would normally have been removed by Muance if the hook
+would not have been implemented. Note that this node is not necessarily the same than
+the one the hook is attached to. It can be a node higher in the DOM tree.
+
+`remove-hook` does nothing if another `remove-hook` hook as already been implemented
+by one of the ancestors of the vnode.
+
+The helper function `remove-dom-node` can be used to remove a node from the DOM.
+
+- (m/remove-dom-node dom-node)
+
 ### Components lifecycle hooks
 
 The following lifecycle hooks can be set on components only:
@@ -430,27 +456,6 @@ Use `will-receive-props` to update the component's local state in response to pr
 - `prev-props`: the previous props of the node's component
 - `props`: the props of the node's component
 - `state-ref`: the local state of the node's component (an atom)
-
-## Hooking into DOM node removal
-
-Animating the removal of a DOM node requires the DOM node to be kept 
-in the DOM for the duration of the animation. Use the `prevent-node-removal`
-function to hook into the removal of a DOM node. This function must 
-only be used in unmount [lifecycle hooks](#lifecycle-hooks) and is intended 
-to be used for fade out animations. 
-
-- (m/prevent-node-removal)
-
-This function returns the DOM node that would have normally been removed by 
-Muance if it had not been called. It is the responsibility of the caller 
-to remove the node from the DOM. The helper function `remove-dom-node` can be 
-used to remove a node from the DOM.
-
-- (m/remove-dom-node)
-
-The `prevent-nodes-removal` function has the same effect than the 
-`prevent-node-removal` function but returns an array of DOM nodes. Use it
-to prevent the removal of the multiple DOM nodes associated with a component. 
 
 ## Side effectful API pitfalls
 

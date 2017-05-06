@@ -12,20 +12,21 @@
 ;; Unmount is stored on the node since it must be called when one of the parents of the node
 ;; is removed
 (def ^{:private true} index-unmount 7)
-(def ^{:private true} index-key 8)
+(def ^{:private true} index-remove-hook 8)
+(def ^{:private true} index-key 9)
 ;; A slot which stores one of two flags:
 ;; - moved-flag
 ;; - moving-flag
 ;; - new-flag
 ;; See the documentation for these two flags for more details
-(def ^{:private true} index-key-moved 9)
+(def ^{:private true} index-key-moved 10)
 ;; keep track of the vnode sibling in order to reorder keyed vnodes duting child nodes
 ;; reconciliation
-(def ^{:private true} index-key-next-vnode 10)
-(def ^{:private true} index-keymap 11)
+(def ^{:private true} index-key-next-vnode 11)
+(def ^{:private true} index-keymap 12)
 ;; When a keyed node is removed, the keymap is marked as invalid. Invalid keymaps are
 ;; cleaned when the close function of the node is called
-(def ^{:private true} index-keymap-invalid 12)
+(def ^{:private true} index-keymap-invalid 13)
 
 (def ^{:private true} index-text 3)
 
@@ -60,7 +61,7 @@
 ;; Used for two different things:
 ;; - Used to handle a edge case when open-impl returns two vnodes to be removed.
 ;; See the invalid states handling in open-impl
-;; - Bound to the vnode that is going to be removed when calling unmount hooks.
+;; - Bound to the vnode that is going to be removed when checking for remove-hooks
 ;; This lets the user the possibility to prevent the real DOM node removal. The user will
 ;; instead get a reference to the real node to remove it later
 (def ^{:dynamic true :private true} *vnode-to-remove* nil)
@@ -81,8 +82,7 @@
 ;; incremented on svg open, decremented on svg close, reseted to 0 on foreignObject open,
 ;; previous value restored on foreignObject close
 (def ^{:dynamic true :private true} *svg-namespace* nil)
-;; Whether to prevented the real dom node from being removed after unmount hooks have been
-;; called or not
+;; Whether a remove-hook prevents the dom node from beeing removed or not
 (def ^{:dynamic true :private true} *prevent-node-removal* nil)
 
 ;; Nodes that moved because of child nodes reconciliation
@@ -238,6 +238,15 @@
   (when (aget vnode index-unmount)
       (aset components-queue *components-queue-count* vnode)
       (set! *components-queue-count* (inc *components-queue-count*)))
+  (when (and (not *prevent-node-removal*) (not *force-render*))
+    (when-let [remove-hook (aget vnode index-remove-hook)]
+      (set! *prevent-node-removal* true)
+      (set! *vnode* vnode)
+      (if (and (component? *vnode-to-remove*)
+               (aget *vnode-to-remove* index-children)
+               (> (.-length (aget *vnode-to-remove* index-children)) 1))
+        (remove-hook (dom-nodes *vnode-to-remove*))
+        (remove-hook (dom-node *vnode-to-remove*)))))
   (when-let [children (aget vnode index-children)]
     (let [children-count (.-length children)]
       (loop [i 0]
@@ -258,18 +267,6 @@
         ((aget vnode index-unmount) props state))
       (recur (dec i))))
   (set! *components-queue-count* queue-start))
-
-(defn prevent-node-removal
-  "Prevent one or multiple DOM nodes from beeing removed from the DOM. This function must be called in an unmount lifecycle hooks and returns the DOM node that would normaly have been removed after the execution of the unmount hlifecycle hook. If multiple DOM nodes are prevented from beeing removed, this function only returns the first one."
-  []
-  (set! *prevent-node-removal* true)
-  (dom-node *vnode-to-remove*))
-
-(defn prevent-nodes-removal
-  "Prevent one or multiple DOM nodes from beeing removed from the DOM. This function must be called in an unmount lifecycle hooks and returns an array of the DOM nodes that would normaly have been removed after the execution of the unmount lifecycle hook."
-  []
-  (set! *prevent-node-removal* true)
-  (dom-nodes *vnode-to-remove*))
 
 (defn- parent-node [parent]
   (if (component? parent)
@@ -344,12 +341,12 @@
 (defn- remove-node [vnode]
   (let [current-vnode *vnode*
         queue-start *components-queue-count*]
-    (enqueue-unmounts vnode)
     (binding [*vnode-to-remove* vnode
               *prevent-node-removal* false]
+      (enqueue-unmounts vnode)
       (call-unmounts queue-start)
       (set! *vnode* current-vnode)
-      (when (or *force-render* (not *prevent-node-removal*))
+      (when (not *prevent-node-removal*)
         (remove-real-node vnode)))))
 
 (defn- clean-keymap [vnode]
@@ -365,7 +362,7 @@
 
 (defn- keyed-next-vnode [vnode]
   (let [next-vnode (aget vnode index-key-next-vnode)]
-    (if (and next-vnode (identical? moving-flag (aget vnode index-key-moved)))
+    (if (and next-vnode (identical? moving-flag (aget next-vnode index-key-moved)))
       (recur next-vnode)
       next-vnode)))
 
@@ -437,7 +434,7 @@
 (defn- new-vnode-key [typeid element keymap key]
   (let [keymap (if (nil? keymap) (init-keymap #js {}) keymap)
         vnode #js [typeid *vnode* element
-                   nil nil nil nil nil key new-flag]]
+                   nil nil nil nil nil nil key new-flag]]
     (o/set keymap key vnode)
     vnode))
 
@@ -526,7 +523,7 @@
             (set! *vnode* vnode)
             prev))))))
 
-(defn- open [tag typeid key will-update will-unmount]
+(defn- open [tag typeid key will-update will-unmount remove-hook]
   (assert (not (nil? *component*))
           (str "tag " tag " was called outside a render loop"))
   (let [prev (open-impl tag (or typeid tag) key
@@ -553,6 +550,8 @@
         (clean-keymap *vnode*))))
   (when (not= (aget *vnode* index-unmount) will-unmount)
     (aset *vnode* index-unmount will-unmount))
+  (when (not= (aget *vnode* index-remove-hook) remove-hook)
+    (aset *vnode* index-remove-hook remove-hook))
   (set! *attrs-count* 0))
 
 (defn- close-impl [did-mount did-update]
@@ -597,13 +596,15 @@
 (def ^{:private true} index-hooks-did-mount 2)
 (def ^{:private true} index-hooks-did-update 3)
 (def ^{:private true} index-hooks-will-unmount 4)
-(def ^{:private true} index-hooks-will-update 5)
+(def ^{:private true} index-hooks-remove 5)
+(def ^{:private true} index-hooks-will-update 6)
 
 (defn- open-comp [component-name typeid props? props comp-fn key hooks]
   (assert (not (nil? *vnode*))
           (str "tried to render " component-name " outside a render loop"))
   (let [vnode-index (or (aget *vnode* index-children-count) 0)
         will-unmount (when hooks (aget hooks index-hooks-will-unmount))
+        remove-hook (when hooks (aget hooks index-hooks-remove))
         will-update (when hooks (aget hooks index-hooks-will-update))
         will-receive-props (when hooks (aget hooks index-hooks-will-receive-props))
         prev (open-impl nil typeid key vnode-index)
@@ -611,6 +612,8 @@
     (set! *props* props)
     (when (not= (aget *vnode* index-unmount) will-unmount)
       (aset *vnode* index-unmount will-unmount))
+    (when (not= (aget *vnode* remove-hook) remove-hook)
+      (aset *vnode* index-remove-hook remove-hook))
     (if (> *new-node* 0)
       (let [state-ref (atom nil)
             get-initial-state (and hooks (aget hooks index-hooks-get-initial-state))]

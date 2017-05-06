@@ -385,12 +385,13 @@
 
 (m/defcomp comp-prevent-node-removal-f [b]
   (if b
-    (h/div
-     ::m/hooks {:will-unmount (fn [props state]
-                                (let [node (m/prevent-node-removal)]
-                                  (m/set-timeout m/*vnode*
-                                                 (fn [state-ref] (m/remove-dom-node node))
-                                                 3000)))})
+    (h/p
+     ::m/hooks {:remove-hook (fn [rem-node] (m/remove-dom-node rem-node))}
+     (h/div
+      ::m/hooks {:remove-hook (fn [rem-node]
+                                (m/set-timeout m/*vnode*
+                                               (fn [state-ref] (m/remove-dom-node rem-node))
+                                               3000))}))
     (h/p)))
 
 (deftest comp-prevent-node-removal []
