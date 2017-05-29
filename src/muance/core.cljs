@@ -687,12 +687,12 @@
   (let [prev-attrs (or (aget *vnode* index-attrs) #js [])
         prev-val (aget prev-attrs *attrs-count*)
         prev-node (aget *vnode* index-node)]
-    (when (nil? (aget *vnode* *attrs-count*))
-      (aset *vnode* *attrs-count* prev-attrs))
-    (set! *attrs-count* (inc *attrs-count*))
+    (when (nil? (aget *vnode* index-attrs))
+      (aset *vnode* index-attrs prev-attrs))
     (when (not= prev-val val)
       (aset prev-attrs *attrs-count* val)
-      (set-fn prev-node ns key val))))
+      (set-fn prev-node ns key val))
+    (set! *attrs-count* (inc *attrs-count*))))
 
 (defn- handle-event-handlers [attrs attrs-index key handler f]
   (let [node (aget *vnode* index-node)]
