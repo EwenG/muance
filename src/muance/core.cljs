@@ -709,7 +709,6 @@
         state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
     (when (nil? (aget *vnode* index-attrs))
       (aset *vnode* index-attrs prev-attrs))
-    (set! *attrs-count* (+ *attrs-count* 2))
     (cond (and (= 0 param-count) (not= prev-f f))
           (let [handler (when (fn? f) (fn [e] (f e state-ref)))]
             (handle-event-handlers prev-attrs *attrs-count* key handler f))
@@ -734,7 +733,7 @@
             (aset prev-attrs (+ *attrs-count* 2) param1)
             (aset prev-attrs (+ *attrs-count* 3) param2)
             (aset prev-attrs (+ *attrs-count* 4) param3)))
-    (set! *attrs-count* (+ *attrs-count* param-count))))
+    (set! *attrs-count* (+ *attrs-count* 2 param-count))))
 
 (defn- on [key f]
   (on-impl key f nil nil nil 0))
