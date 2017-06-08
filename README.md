@@ -58,6 +58,9 @@ Source code for the examples is in the [examples](https://github.com/EwenG/muanc
 - `(m/patch vtree component props)`: Patch the `vtree` using `component`, passing the parameter `props` to `component`
 - `m/defcomp`: Define a component. Use it like `defn`, with the limitation that `defcomp` takes zero or one parameter
 - `(m/hooks component hooks-map)`: Adds [lifecycle hooks](#lifecycle-hooks) to `component` 
+- `(m/vnode)`: Get the current vnode. Must be called inside a render loop.
+- `(m/state)`: Get the local state of the current component. Must be called inside a render loop.
+
 
 ### Asynchronous rendering
 
@@ -90,7 +93,7 @@ Components are called like functions and take a *key* as an optional first param
 ```
 
 Components are stateful. A Component is re-rendered when one of its props or local state changes.
-The value of components local state is bound to the `muance.core/*state*` var and can be used in the component body or one of its [lifecycle hooks](#lifecycle-hooks) methods.
+The value of components local state can be retrieved using the `(muance.core/vnode)` function and can be used in the component body or one of its [lifecycle hooks](#lifecycle-hooks) methods.
 
 Components local state is an [atom](https://clojure.org/reference/atoms). The atom is passed as a parameter to [event handlers](#event-handlers) and several of the component [lifecycle hooks](#lifecycle-hooks). Changing the value of the atom marks the component as needed to be re-rendered.
 
@@ -195,18 +198,18 @@ If you want to create an element that is not already in the `muance.h` namespace
 ### Virtual node API
 
 The following functions can be used to retrieve informations about a virtual node. 
-They expect the current virtual node, which is bound to the `muance.core/*vnode*` var when patching the virtual DOM.
+They expect the current virtual node, which can be accessed using the `(muance.core/vnode)` function when patching the virtual DOM.
  - `(muance.core/component-name vnode)`: Returns the fully qualified name of the node's component, as a string. This may be useful for logging.
  
  ```
- (muance.core/component-name m/*vnode*) ;; "cljs.user/foo"
+ (muance.core/component-name (m/vnode)) ;; "cljs.user/foo"
  ```
  
  - `(muance.core/dom-node vnode)`: Returns the DOM node associated with the current virtual node. For components creating multiple nodes, this returns the DOM node of its first child. 
  - `(muance.core/dom-nodes vnode)`: Returns an array of all the DOM nodes associated with the current virtual node. This is only useful for components that create multiple nodes.
   
   ```
-  (muance.core/dom-nodes m/*vnode*) ;; #js [#object[HTMLDivElement [object HTMLDivElement]]]
+  (muance.core/dom-nodes (m/vnode)) ;; #js [#object[HTMLDivElement [object HTMLDivElement]]]
   ```
   
  - `(muance.core/key vnode)`: Returns the key of the current virtual node. See [child nodes reconciliation](#child-nodes-reconciliation).
@@ -423,9 +426,9 @@ the one the hook is attached to. It can be a node higher in the DOM tree.
 `remove-hook` does nothing if another `remove-hook` hook as already been implemented
 by one of the ancestors of the vnode.
 
-The helper function `remove-dom-node` can be used to remove a node from the DOM.
+The helper function `remove-node` can be used to remove a node from the DOM.
 
-- (m/remove-dom-node dom-node)
+- (m/remove-node dom-node)
 
 ### Components lifecycle hooks
 

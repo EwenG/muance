@@ -4,14 +4,14 @@
             [cljs.repl])
   (:import [cljs.tagged_literals JSValue]))
 
-(defonce typeid (atom 1))
-(defonce comp-typeid (atom -1))
+(defonce ^:private typeid (atom 1))
+(defonce ^:private comp-typeid (atom -1))
 
-(defn inc-typeid [t]
+(defn- inc-typeid [t]
   ;; MAX_SAFE_INTEGER
   (if (= t 9007199254740991) 1 (inc t)))
 
-(defn dec-comp-typeid [t]
+(defn- dec-comp-typeid [t]
   ;; MIN_SAFE_INTEGER
   (if (= t -9007199254740991) -1 (dec t)))
 
@@ -70,21 +70,23 @@
       (recur (:info init)))
     :else nil))
 
-(defn- static-symbol? [env s]
+(def ^:const local-state-sym 'muance.core/*state*)
+
+(defn- static-symbol? [env static-syms s]
   (if-let [local (get (:locals env) s)]
     (not (local-dep local))
-    (not (= 'muance.core/*state* (cljs-resolve env s)))))
+    (not (get (cljs-resolve env s) static-syms))))
 
-(defn- static? [env x]
+(defn- static? [env static-syms x]
   (cond (nil? x) true
         (boolean? x) true
         (string? x) true
         (keyword? x) true
         (number? x) true
         (and (seq? x) (= (first x) `quote)) true
-        (vector? x) (every? (partial static? env) x)
-        (map? x) (every? (partial static? env) x)
-        (symbol? x) (static-symbol? env x)
+        (vector? x) (every? (partial static? env #{local-state-sym}) x)
+        (map? x) (every? (partial static? env #{local-state-sym}) x)
+        (symbol? x) (static-symbol? env #{local-state-sym} x)
         :else false))
 
 (defn- as-str [x]
@@ -130,24 +132,24 @@
 
 (defn- class-call [env class]
   (if (vector? class)
-    (if (every? (partial static? env) class)
+    (if (every? (partial static? env #{local-state-sym}) class)
       (if (some symbol? class)
         (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
           `(prop-static "className" (cljs.core/str ~@classes-with-spaces)))
         `(prop-static "className" ~(reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class)))
       (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
         `(prop "className" (cljs.core/str ~@classes-with-spaces))))
-    (if (static? env class)
+    (if (static? env #{local-state-sym} class)
       `(prop-static "className" ~class)
       `(prop "className" ~class))))
 
 (defn- style-calls [env style]
   (map (fn [[k v]]
          (if (string/starts-with? (str k) ":--")
-           (if (static? env v)
+           (if (static? env #{local-state-sym} v)
              `(style-custom-static ~(as-str k) ~v)
              `(style-custom ~(as-str k) ~v))
-           (if (static? env v)
+           (if (static? env #{local-state-sym} v)
              `(style-static ~(as-str k) ~v)
              `(style ~(as-str k) ~v))))
        style))
@@ -161,7 +163,7 @@
     f))
 
 (defn- on-calls [env ons]
-  (let [static? (partial static? env)
+  (let [static? (partial static? env #{local-state-sym})
         ons (if (handler? ons) [ons] ons)]
     (map (fn [[k f & args]]
            (if (and (static? f) (every? static? args))
@@ -196,30 +198,30 @@
               (= k :style) (into calls (style-calls env v))
               (= k ::on)  (into calls (on-calls env v))
               (and (= tag "input") (= k :value))
-              (conj calls (if (static? env v)
+              (conj calls (if (static? env #{local-state-sym} v)
                             `(prop-static "value" ~v)
                             `(input-value ~v)))
               (string/starts-with? (str k) ":xlink")
-              (conj calls (if (static? env v)
+              (conj calls (if (static? env #{local-state-sym} v)
                             `(attr-ns-static xlink-ns ~(as-str k) ~v)
                             `(attr-ns xlink-ns ~(as-str k) ~v)))
               (string/starts-with? (str k) ":xml")
-              (conj calls (if (static? env v)
+              (conj calls (if (static? env #{local-state-sym} v)
                             `(attr-ns-static xml-ns ~(as-str k) ~v)
                             `(attr-ns xml-ns ~(as-str k) ~v)))
               (string/starts-with? (str k) ":data-")
-              (conj calls (if (static? env v)
+              (conj calls (if (static? env #{local-state-sym} v)
                             `(attr-ns-static nil ~(as-str k) ~v)
                             `(attr-ns nil ~(as-str k) ~v)))
               (string/starts-with? (str k) ":aria-")
-              (conj calls (if (static? env v)
+              (conj calls (if (static? env #{local-state-sym} v)
                             `(attr-ns-static nil ~(as-str k) ~v)
                             `(attr-ns nil ~(as-str k) ~v)))
               (= "muance.attribute" (namespace k))
-              (conj calls (if (static? env v)
+              (conj calls (if (static? env #{local-state-sym} v)
                             `(attr-ns-static nil ~(as-str k) ~v)
                             `(attr-ns nil ~(as-str k) ~v)))
-              :else (conj calls (if (static? env v)
+              :else (conj calls (if (static? env #{local-state-sym} v)
                                   `(prop-static ~(as-str k) ~v)
                                   `(prop ~(as-str k) ~v)))))
           '() attrs))
@@ -257,17 +259,17 @@
   [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
 
-(defn- with-macro-meta [tag]
-  (with-meta tag (assoc (meta tag) ::tag (str tag))))
+(defn- with-macro-meta [name tag]
+  (with-meta name (assoc (meta name) ::tag (str tag))))
 
 (defmacro make-element-macro
   "Defines a new HTML element macro with the provided tag. The newly defined HTML element macro
   can be used during a Muance vtree patching to create an HTML element which name is the provided
   tag."
   [tag]
-  `(defmacro ~(with-macro-meta tag) [~'& ~'body]
-     (swap! typeid inc-typeid)
-     (compile-element-macro ~'&env ~(str tag) @typeid ~'body)))
+  `(defmacro ~(with-macro-meta tag tag) [~'& ~'body]
+     (swap! @#'typeid #'inc-typeid)
+     (compile-element-macro ~'&env ~(str tag) @@#'typeid ~'body)))
 
 (defn- params-with-props [params]
   (cond (symbol? params) [params params]
@@ -293,8 +295,8 @@
    "muance.core.refresh_roots();"))
 
 ;; The comp-fn does not need to be a var in order to support reloading because of the level
-;; of indirection intriduced by variadic arity functions
-;; Although it would be better for comp-fn to be a var to avoid relying on clojurescript inernals 
+;; of indirection introduced by variadic arity functions
+;; Although it would be better for comp-fn to be a var to avoid relying on clojurescript inernals
 (defmacro defcomp
   "Define a Muance stateful component. A Muance component takes zero or one argument."
   [name docstring-or-params & params-body]

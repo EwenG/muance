@@ -1,7 +1,8 @@
 (ns muance.todo
   (:require
    [muance.core :as m :include-macros true]
-   [clojure.string])
+   [clojure.string]
+   [goog.object :as o])
   (:require-macros [muance.h :as h]))
 
 (m/defcomp css []
@@ -65,7 +66,7 @@
 
 (m/defcomp todo-input []
   (h/input :class "new-todo" :placeholder "What needs to be done?" :autofocus true
-           :type "text" :value m/*state*
+           :type "text" :value (m/state)
            ::m/on [[:input input-changed]
                    [:keydown input-keydown]
                    [:blur input-save]]))
@@ -85,11 +86,11 @@
     nil))
 
 (defn focus-node [props state]
-  (.focus (m/dom-node m/*vnode*)))
+  (.focus (m/dom-node (m/vnode))))
 
 (defn todo-edit [title id]
   (h/input :class "edit"
-           :type "text" :value (str (:val m/*state*))
+           :type "text" :value (str (:val (m/state)))
            ::m/on [[:input edit-changed]
                    [:keydown edit-keydown id]
                    [:blur edit-save id]]
@@ -124,7 +125,7 @@
 
 (m/defcomp todo-item [{:keys [id done title]}]
   (h/li
-   :class [(when done "completed") (when (:editing m/*state*) "editing")]
+   :class [(when done "completed") (when (:editing (m/state)) "editing")]
    (h/div
     :class "view"
     (h/input
@@ -134,7 +135,7 @@
     (h/button
      :class "destroy"
      ::m/on [:click delete-handler id]))
-   (when (:editing m/*state*)
+   (when (:editing (m/state))
      (todo-edit title id))))
 
 (defn display-item? [{:keys [done]} filt]

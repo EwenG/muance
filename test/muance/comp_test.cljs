@@ -96,9 +96,9 @@
 
 (defn set-key-prop [type]
   (fn []
-    (let [nodes (array-seq (m/dom-nodes m/*vnode*) 0)]
+    (let [nodes (array-seq (m/dom-nodes (m/vnode)) 0)]
       (doseq [node nodes]
-        (let [k (m/key m/*vnode*)]
+        (let [k (m/key (m/vnode))]
           (o/set node "keyedKey" k)
           (o/set node "keyedType" type))))))
 
@@ -203,8 +203,8 @@
                                (prn "did-mount-inner")
                                (prn :props props)
                                (prn :state state)
-                               (prn :component-name (m/component-name m/*vnode*))
-                               (prn :node (m/dom-node m/*vnode*)))
+                               (prn :component-name (m/component-name (m/vnode)))
+                               (prn :node (m/dom-node (m/vnode))))
                   :will-update (fn [props state]
                                  (prn "will-update-inner")
                                  (prn :props props)
@@ -217,8 +217,8 @@
                                   (prn "will-unmount-inner")
                                   (prn :props props)
                                   (prn :state state)
-                                  (prn :component-name (m/component-name m/*vnode*))
-                                  (prn :node (m/dom-node m/*vnode*))
+                                  (prn :component-name (m/component-name (m/vnode)))
+                                  (prn :node (m/dom-node (m/vnode)))
                                   )}
        (m/text props)))
 
@@ -227,8 +227,8 @@
                        (prn "did-mount")
                        (prn :props props)
                        (prn :state state)
-                       (prn :component-name (m/component-name m/*vnode*))
-                       (prn :nodes (m/dom-nodes m/*vnode*)))
+                       (prn :component-name (m/component-name (m/vnode)))
+                       (prn :nodes (m/dom-nodes (m/vnode))))
           :will-update (fn [props state]
                          (prn "will-update")
                          (prn :props props)
@@ -241,8 +241,8 @@
                           (prn "will-unmount")
                           (prn :props props)
                           (prn :state state)
-                          (prn :component-name (m/component-name m/*vnode*))
-                          (prn :nodes (m/dom-nodes m/*vnode*)))
+                          (prn :component-name (m/component-name (m/vnode)))
+                          (prn :nodes (m/dom-nodes (m/vnode))))
           :get-initial-state (fn [props]
                                (prn "get-initial-state")
                                (prn :props props)
@@ -279,21 +279,21 @@
   (swap! state-ref inc))
 
 (m/defcomp render-queue-depth2 [props]
-  (h/div :aria-state m/*state*
+  (h/div :aria-state (m/state)
          :class (:depth1-state props)
          :style {:width "300px" :height "300px" :border "1px solid green"}
          ::m/on [:click render-queue-click]
          (m/text props)))
 
 (m/defcomp render-queue-depth1 [props]
-  (h/p :class m/*state*
+  (h/p :class (m/state)
        :id props
        :style {:width "500px" :height "500px" :border "1px solid black"}
        ::m/on [:click render-queue-click]
-       (render-queue-depth2 (assoc (select-keys props [:depth2]) :depth-1-state m/*state*))))
+       (render-queue-depth2 (assoc (select-keys props [:depth2]) :depth-1-state (m/state)))))
 
 (m/defcomp render-queue-depth1* []
-  (h/p :class m/*state*
+  (h/p :class (m/state)
        :style {:width "500px" :height "500px" :border "1px solid red"}
        ::m/on [:click render-queue-click]))
 
@@ -302,17 +302,16 @@
          (render-queue-depth1*)))
 
 (m/hooks render-queue-depth1
-         {:get-initial-state (fn [props]
-                               0)
+         {:get-initial-state (fn [props] 0)
           :will-receive-props (fn [prev-props props state]
                                 (reset! state (:depth1 props)))
           :did-mount (fn [props state]
-                       (let [node (m/dom-node m/*vnode*)]
-                         (o/set node (m/component-name m/*vnode*)
-                                (m/set-interval m/*vnode* #(swap! % inc) 1000))))
+                       (let [node (m/dom-node (m/vnode))]
+                         (o/set node (m/component-name (m/vnode))
+                                (m/set-interval (m/vnode) #(swap! % inc) 1000))))
           :will-unmount (fn [props state]
-                          (let [node (m/dom-node m/*vnode*)
-                                interval-id (o/get node (m/component-name m/*vnode*))]
+                          (let [node (m/dom-node (m/vnode))
+                                interval-id (o/get node (m/component-name (m/vnode)))]
                             ;; throws an exception
                             #_(.clearInterval interval-id)
                             (.clearInterval js/window interval-id)))})
@@ -349,17 +348,17 @@
   (swap! state-ref inc))
 
 (m/defcomp comp-exception-keyed [b]
-  (let [comp-k (m/key m/*vnode*)]
+  (let [comp-k (m/key (m/vnode))]
     (h/p
      :style {:width "500px" :height "500px"}
      ::m/on [:click exception-click-handler]
-     (m/text comp-k " " m/*state*))))
+     (m/text comp-k " " (m/state)))))
 
 (m/hooks comp-exception-keyed {:will-update (fn [b]
-                                              (when (= (m/key m/*vnode*) "3")
+                                              (when (= (m/key (m/vnode)) "3")
                                                 #_(throw (js/Error. "err"))))
                                :will-unmount (fn [b]
-                                               (when (= (m/key m/*vnode*) "3")
+                                               (when (= (m/key (m/vnode)) "3")
                                                  #_(throw (js/Error. "err"))))})
 
 #_(m/defcomp comp-exception-f [b]
@@ -386,11 +385,11 @@
 (m/defcomp comp-prevent-node-removal-f [b]
   (if b
     (h/p
-     ::m/hooks {:remove-hook (fn [rem-node] (m/remove-dom-node rem-node))}
+     ::m/hooks {:remove-hook (fn [rem-node] (m/remove-node rem-node))}
      (h/div
       ::m/hooks {:remove-hook (fn [rem-node]
-                                (m/set-timeout m/*vnode*
-                                               (fn [state-ref] (m/remove-dom-node rem-node))
+                                (m/set-timeout (m/vnode)
+                                               (fn [state-ref] (m/remove-node rem-node))
                                                3000))}))
     (h/p)))
 
