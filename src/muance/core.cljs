@@ -767,11 +767,11 @@
     (when (nil? (aget *vnode* index-attrs))
       (aset *vnode* index-attrs prev-attrs))
     (cond (and (= 0 param-count) (not= prev-f f))
-          (let [handler (make-handler-0 state-ref f)]
+          (let [handler (make-handler-0 f state-ref)]
             (handle-event-handlers context prev-attrs *attrs-count* key handler f))
           (and (= 1 param-count) (or (not= prev-f f)
                                      (not= param1 (aget prev-attrs (+ *attrs-count* 2)))))
-          (let [handler (make-handler-1 state-ref f param1)]
+          (let [handler (make-handler-1 f state-ref param1)]
             (handle-event-handlers context prev-attrs *attrs-count* key handler f)
             (aset prev-attrs (+ *attrs-count* 2) param1))
           (and (= 2 param-count) (or (not= prev-f f)
