@@ -738,12 +738,12 @@
 (defn- close-comp [parent-component hooks]
   (close-comp-contextualized context-dom parent-component hooks))
 
-(defn- attr-impl [ns key val set-fn]
-  (let [prev-attrs (or (aget *vnode* index-attrs) #js [])
+(defn- attr-impl [vnode ns key val set-fn]
+  (let [prev-attrs (or (aget vnode index-attrs) #js [])
         prev-val (aget prev-attrs *attrs-count*)
-        prev-node (aget *vnode* index-node)]
-    (when (nil? (aget *vnode* index-attrs))
-      (aset *vnode* index-attrs prev-attrs))
+        prev-node (aget vnode index-node)]
+    (when (nil? (aget vnode index-attrs))
+      (aset vnode index-attrs prev-attrs))
     (when (not= prev-val val)
       (aset prev-attrs *attrs-count* val)
       (set-fn prev-node ns key val))
@@ -829,7 +829,7 @@
       (handle-event-handler node key nil (make-handler-fn-3 f state-ref attr1 attr2 attr3)))))
 
 (defn- attr-ns [ns key val]
-  (attr-impl ns key (when (not (nil? val)) (str val)) set-attribute))
+  (attr-impl *vnode* ns key (when (not (nil? val)) (str val)) set-attribute))
 
 (defn- attr-ns-static [ns key val]
   (when (and (> *new-node* 0) (not (nil? val)))
@@ -838,8 +838,8 @@
 
 (defn- prop [key val]
   (if (> *svg-namespace* 0)
-    (attr-impl nil key (when (not (nil? val)) (str val)) set-attribute)
-    (attr-impl nil key val set-property)))
+    (attr-impl *vnode* nil key (when (not (nil? val)) (str val)) set-attribute)
+    (attr-impl *vnode* nil key val set-property)))
 
 (defn- prop-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
@@ -849,10 +849,10 @@
         (set-property node nil key val)))))
 
 (defn- input-value [val]
-  (attr-impl nil "value" (when (not (nil? val)) (str val)) set-input-value))
+  (attr-impl *vnode* nil "value" (when (not (nil? val)) (str val)) set-input-value))
 
 (defn- style [key val]
-  (attr-impl nil key (str val) set-style))
+  (attr-impl *vnode* nil key (str val) set-style))
 
 (defn- style-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
@@ -860,7 +860,7 @@
       (set-style node nil key (str val)))))
 
 (defn- style-custom [key val]
-  (attr-impl nil key (str val) set-style-custom))
+  (attr-impl *vnode* nil key (str val) set-style-custom))
 
 (defn- style-custom-static [key val]
   (when (and (> *new-node* 0) (not (nil? val)))
