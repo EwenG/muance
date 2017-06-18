@@ -151,6 +151,8 @@
 (defn- make-handler-fn-3 [f state-ref param1 param2 param3]
   (when (fn? f) (fn [e] (f e state-ref param1 param2 param3))))
 
+(defn async-fn [f] (.requestAnimationFrame js/window f))
+
 (def context-dom #js {:insert-fn insert-fn-dom
                       :remove-node-fn remove-node
                       :create-element-fn create-element
@@ -158,7 +160,8 @@
                       :make-handler-0 make-handler-fn-0
                       :make-handler-1 make-handler-fn-1
                       :make-handler-2 make-handler-fn-2
-                      :make-handler-3 make-handler-fn-3})
+                      :make-handler-3 make-handler-fn-3
+                      :async-fn async-fn})
 
 (defn state []
   (assert (not (nil? *vnode*)) (str "muance.core/state was called outside a render loop"))
@@ -248,6 +251,7 @@
           vnode (aget stateful-data 0)
           comp-fn (aget stateful-data 1)
           render-queue (aget stateful-data 2)
+          async-fn (aget stateful-data 3)
           async (aget render-queue index-render-queue-async)
           component-depth (aget vnode index-comp-data index-comp-data-depth)]
       (when (not (dirty-component? vnode))
@@ -261,9 +265,7 @@
         (when-not (aget render-queue index-render-queue-dirty-flag)
           (aset render-queue index-render-queue-dirty-flag true)
           (if async
-            (.requestAnimationFrame js/window
-                                    (fn []
-                                      (process-render-queue render-queue)))
+            (async-fn (fn [] (process-render-queue render-queue)))
             (process-render-queue render-queue)))))))
 
 (defn- remove-real-node [context vnode]
@@ -275,7 +277,7 @@
             (remove-real-node context (aget children i))
             (recur (inc i))))))
     (let [node (aget vnode index-node)
-          remove-node-fn (aget context "remove-node-fn")]
+          remove-node-fn (o/get context "remove-node-fn")]
       (remove-node-fn node))))
 
 (defn- enqueue-unmounts [vnode]
@@ -363,7 +365,7 @@
           (when (< i l)
             (insert-vnode-before* context parent-node (aget children i) ref-node)
             (recur (inc i))))))
-    (let [insert-fn (aget context "insert-fn")]
+    (let [insert-fn (o/get context "insert-fn")]
       (insert-fn parent-node vnode ref-node))))
 
 ;; index-in-parent is passed as a parameter because, when reordering keyed nodes, the
@@ -530,7 +532,7 @@
             (set! *vnode* moved-vnode)
             prev)
           ;; this is a new node -> replace the node at the current index
-          (let [create-element-fn (aget context "create-element-fn")
+          (let [create-element-fn (o/get context "create-element-fn")
                 vnode (if key
                         (new-vnode-key typeid (create-element-fn tag) keymap key)
                         (new-vnode typeid (create-element-fn tag)))
@@ -665,7 +667,7 @@
       (let [state-ref (atom nil)
             get-initial-state (and hooks (aget hooks index-hooks-get-initial-state))]
         (o/set state-ref vnode-stateful-key
-               #js [*vnode* comp-fn *render-queue*])
+               #js [*vnode* comp-fn *render-queue* (o/get context "async-fn")])
         (add-watch state-ref ::component on-state-change)
         (aset *vnode* index-comp-props (if props? *props* no-props-flag))
         (aset *vnode* index-comp-data
@@ -749,36 +751,42 @@
       (set-fn prev-node ns key val))
     (set! *attrs-count* (inc *attrs-count*))))
 
-(defn- handle-event-handlers [context attrs attrs-index key handler f]
+(defn- handle-event-handlers [context on-type attrs attrs-index key handler f]
   (let [node (aget *vnode* index-node)
-        handle-event-handler-fn (aget context "handle-event-handler-fn")]
+        handle-event-handler-fn (o/get context (if (identical? "listener" on-type)
+                                                 "handle-listener-fn"
+                                                 "handle-event-handler-fn" ))]
     (handle-event-handler-fn node key (aget attrs attrs-index) handler)
     (aset attrs attrs-index handler)
     (aset attrs (inc attrs-index) f)))
 
-(defn- on-impl [context key f param1 param2 param3 param-count]
+(defn- on-impl [context on-type key f param1 param2 param3 param-count]
   (let [prev-attrs (or (aget *vnode* index-attrs) #js [])
         prev-f (aget prev-attrs (inc *attrs-count*))
         state-ref (aget *component* index-comp-data index-comp-data-state-ref)
-        make-handler-0 (aget context "make-handler-0")
-        make-handler-1 (aget context "make-handler-1")
-        make-handler-2 (aget context "make-handler-2")
-        make-handler-3 (aget context "make-handler-3")]
+        make-handler-0 (o/get context (if (identical? "listener" on-type)
+                                        "make-listener-0" "make-handler-0" ))
+        make-handler-1 (o/get context (if (identical? "listener" on-type)
+                                        "make-listener-1" "make-handler-1"))
+        make-handler-2 (o/get context (if (identical? "listener" on-type)
+                                        "make-listener-2" "make-handler-2"))
+        make-handler-3 (o/get context (if (identical? "listener" on-type)
+                                        "make-listener-3" "make-handler-3"))]
     (when (nil? (aget *vnode* index-attrs))
       (aset *vnode* index-attrs prev-attrs))
     (cond (and (= 0 param-count) (not= prev-f f))
           (let [handler (make-handler-0 f state-ref)]
-            (handle-event-handlers context prev-attrs *attrs-count* key handler f))
+            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f))
           (and (= 1 param-count) (or (not= prev-f f)
                                      (not= param1 (aget prev-attrs (+ *attrs-count* 2)))))
           (let [handler (make-handler-1 f state-ref param1)]
-            (handle-event-handlers context prev-attrs *attrs-count* key handler f)
+            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f)
             (aset prev-attrs (+ *attrs-count* 2) param1))
           (and (= 2 param-count) (or (not= prev-f f)
                                      (not= param1 (aget prev-attrs (+ *attrs-count* 2)))
                                      (not= param2 (aget prev-attrs (+ *attrs-count* 3)))))
           (let [handler (make-handler-2 f state-ref param1 param2)]
-            (handle-event-handlers context prev-attrs *attrs-count* key handler f)
+            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f)
             (aset prev-attrs (+ *attrs-count* 2) param1)
             (aset prev-attrs (+ *attrs-count* 3) param2))
           (and (= 3 param-count) (or (not= prev-f f)
@@ -786,14 +794,14 @@
                                      (not= param2 (aget prev-attrs (+ *attrs-count* 3)))
                                      (not= param3 (aget prev-attrs (+ *attrs-count* 4)))))
           (let [handler (make-handler-3 f state-ref param1 param2 param3)]
-            (handle-event-handlers context prev-attrs *attrs-count* key handler f)
+            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f)
             (aset prev-attrs (+ *attrs-count* 2) param1)
             (aset prev-attrs (+ *attrs-count* 3) param2)
             (aset prev-attrs (+ *attrs-count* 4) param3)))
     (set! *attrs-count* (+ *attrs-count* 2 param-count))))
 
 (defn- on [key f]
-  (on-impl context-dom key f nil nil nil 0))
+  (on-impl context-dom "handler" key f nil nil nil 0))
 
 (defn- on-static [key f]
   (when (and (> *new-node* 0) (fn? f))
@@ -802,7 +810,7 @@
       (handle-event-handler node key nil (make-handler-fn-0 f state-ref)))))
 
 (defn- on1 [key f attr1]
-  (on-impl context-dom key f attr1 nil nil 1))
+  (on-impl context-dom "handler" key f attr1 nil nil 1))
 
 (defn- on-static1 [key f attr1]
   (when (and (> *new-node* 0) (fn? f))
@@ -811,7 +819,7 @@
       (handle-event-handler node key nil (make-handler-fn-1 f state-ref attr1)))))
 
 (defn- on2 [key f attr1 attr2]
-  (on-impl context-dom key f attr1 attr2 nil 2))
+  (on-impl context-dom "handler" key f attr1 attr2 nil 2))
 
 (defn- on-static2 [key f attr1 attr2]
   (when (and (> *new-node* 0) (fn? f))
@@ -820,7 +828,7 @@
       (handle-event-handler node key nil (make-handler-fn-2 f state-ref attr1 attr2)))))
 
 (defn- on3 [key f attr1 attr2 attr3]
-  (on-impl context-dom key f attr1 attr2 attr3 3))
+  (on-impl context-dom "handler" key f attr1 attr2 attr3 3))
 
 (defn- on-static3 [key f attr1 attr2 attr3]
   (when (and (> *new-node* 0) (fn? f))
@@ -965,8 +973,7 @@
         (when-not (aget render-queue index-render-queue-dirty-flag)
           (aset render-queue index-render-queue-dirty-flag true)
           (if async
-            (.requestAnimationFrame js/window
-                                    (fn [] (process-render-queue render-queue)))
+            (async-fn (fn [] (process-render-queue render-queue)))
             (process-render-queue render-queue))))
       (do
         (patch-impl render-queue vnode nil patch-fn props false)
