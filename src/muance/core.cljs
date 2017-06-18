@@ -760,6 +760,8 @@
     (aset attrs attrs-index handler)
     (aset attrs (inc attrs-index) f)))
 
+;; on-type is useful to be able to register different type of event handlers (such as property
+;; change listeners of javafx)
 (defn- on-impl [context on-type key f param1 param2 param3 param-count]
   (let [prev-attrs (or (aget *vnode* index-attrs) #js [])
         prev-f (aget prev-attrs (inc *attrs-count*))
