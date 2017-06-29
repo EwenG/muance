@@ -157,9 +157,9 @@
 ;; Wrap event handlers in a var when in dev compilation mode in order to enable the possibility
 ;; to dynamically redefine event handler functions definition
 (defn- maybe-wrap-in-var [env f]
-  (if (and (-> @cljs.env/*compiler* :options :optimizations (= :none))
-           (symbol? f) (cljs-resolve env f))
-    `(cljs.core/Var. (cljs.core/fn [] ~f) ~f nil)
+  (if (and (-> @cljs.env/*compiler* :options :optimizations (= :none)) (symbol? f))
+    (when-let [resolved (cljs-resolve env f)]
+      `(cljs.core/Var. (cljs.core/fn [] ~f) (quote ~resolved) nil))
     f))
 
 (defn- on-calls [env ons]
@@ -259,15 +259,12 @@
   [& text]
   `(muance.core/text-node (cljs.core/str ~@text)))
 
-(defn- with-macro-meta [name tag]
-  (with-meta name (assoc (meta name) ::tag (str tag))))
-
 (defmacro make-element-macro
   "Defines a new HTML element macro with the provided tag. The newly defined HTML element macro
   can be used during a Muance vtree patching to create an HTML element which name is the provided
   tag."
   [tag]
-  `(defmacro ~(with-macro-meta tag tag) [~'& ~'body]
+  `(defmacro ~(vary-meta tag assoc ::tag (str tag)) [~'& ~'body]
      (swap! @#'typeid #'inc-typeid)
      (compile-element-macro ~'&env ~(str tag) @@#'typeid ~'body)))
 
