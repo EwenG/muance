@@ -48,8 +48,9 @@
 
 (def ^{:private true} index-render-queue-async 0)
 (def ^{:private true} index-render-queue-post-render 1)
-(def ^{:private true} index-render-queue-dirty-flag 2)
-(def ^{:private true} index-render-queue-offset 3)
+(def ^{:private true} index-render-queue-post-render-internal 2)
+(def ^{:private true} index-render-queue-dirty-flag 3)
+(def ^{:private true} index-render-queue-offset 4)
 
 ;; The data needed in a local state watcher is stored on the local state itself, using this key.
 (def ^{:private true} vnode-stateful-key "muance.core/vnode-stateful")
@@ -122,9 +123,10 @@
 
 (defn remove-node
   "Remove a DOM node from the DOM. Do nothing if the node has no parent."
-  [node]
-  (when-let [p (.-parentNode node)]
-    (.removeChild p node)))
+  [vnode]
+  (let [node (aget vnode index-node)]
+    (when-let [p (.-parentNode node)]
+      (.removeChild p node))))
 
 (defn- create-element [tag]
   ;; tag is nil when opening a component
@@ -153,6 +155,9 @@
 
 (defn async-fn [f] (.requestAnimationFrame js/window f))
 
+(declare process-render-queue)
+(declare patch-impl)
+
 (def context-dom #js {:insert-fn insert-fn-dom
                       :remove-node-fn remove-node
                       :create-element-fn create-element
@@ -161,7 +166,8 @@
                       :make-handler-1 make-handler-fn-1
                       :make-handler-2 make-handler-fn-2
                       :make-handler-3 make-handler-fn-3
-                      :async-fn async-fn})
+                      :async-fn async-fn
+                      :patch-fn patch-impl})
 
 (defn state []
   (assert (not (nil? *vnode*)) (str "muance.core/state was called outside a render loop"))
@@ -170,8 +176,6 @@
 (defn vnode []
   (assert (not (nil? *vnode*)) (str "muance.core/vnode was called outside a render loop"))
   *vnode*)
-
-(declare process-render-queue)
 
 (defn- component? [vnode]
   (< (aget vnode index-typeid) 0))
@@ -251,7 +255,8 @@
           vnode (aget stateful-data 0)
           comp-fn (aget stateful-data 1)
           render-queue (aget stateful-data 2)
-          async-fn (aget stateful-data 3)
+          context (aget stateful-data 3)
+          async-fn (o/get context "async-fn")
           async (aget render-queue index-render-queue-async)
           component-depth (aget vnode index-comp-data index-comp-data-depth)]
       (when (not (dirty-component? vnode))
@@ -265,8 +270,8 @@
         (when-not (aget render-queue index-render-queue-dirty-flag)
           (aset render-queue index-render-queue-dirty-flag true)
           (if async
-            (async-fn (fn [] (process-render-queue render-queue)))
-            (process-render-queue render-queue)))))))
+            (async-fn (fn [] (process-render-queue context render-queue)))
+            (process-render-queue context render-queue)))))))
 
 (defn- remove-real-node [context vnode]
   (if (component? vnode)
@@ -276,9 +281,8 @@
           (when (< i l)
             (remove-real-node context (aget children i))
             (recur (inc i))))))
-    (let [node (aget vnode index-node)
-          remove-node-fn (o/get context "remove-node-fn")]
-      (remove-node-fn node))))
+    (let [remove-node-fn (o/get context "remove-node-fn")]
+      (remove-node-fn vnode))))
 
 (defn- enqueue-unmounts [vnode]
   (when (component? vnode)
@@ -666,8 +670,7 @@
     (if (> *new-node* 0)
       (let [state-ref (atom nil)
             get-initial-state (and hooks (aget hooks index-hooks-get-initial-state))]
-        (o/set state-ref vnode-stateful-key
-               #js [*vnode* comp-fn *render-queue* (o/get context "async-fn")])
+        (o/set state-ref vnode-stateful-key #js [*vnode* comp-fn *render-queue* context])
         (add-watch state-ref ::component on-state-change)
         (aset *vnode* index-comp-props (if props? *props* no-props-flag))
         (aset *vnode* index-comp-data
@@ -927,18 +930,20 @@
     3 ((aget post-render 0) (aget post-render 1) (aget post-render 2))
     4 ((aget post-render 0) (aget post-render 1) (aget post-render 2) (aget post-render 3))))
 
+(defn- call-post-render-internal [post-render]
+  (post-render))
+
 (defn- process-post-render-hooks [render-queue]
   (let [post-renders (aget render-queue index-render-queue-post-render)]
-    (loop [i 0]
-      (let [post-render (aget post-renders i)]
-        (when-not (nil? post-render)
-          (call-post-render post-render)
-          (recur (inc i)))))
-    (aset render-queue index-render-queue-post-render #js [])))
+    (.forEach post-renders call-post-render)
+    (aset render-queue index-render-queue-post-render #js []))
+  (.forEach (aget render-queue index-render-queue-post-render-internal)
+            call-post-render-internal))
 
-(defn- process-render-queue [render-queue]
+(defn- process-render-queue [context render-queue]
   (aset render-queue index-render-queue-dirty-flag nil)
-  (let [l (.-length render-queue)]
+  (let [patch-impl (o/get context "patch-fn")
+        l (.-length render-queue)]
     (loop [i index-render-queue-offset]
       (when (< i l)
         (when-let [dirty-comps (aget render-queue i)]
@@ -955,13 +960,15 @@
         (recur (inc i)))))
   (process-post-render-hooks render-queue))
 
-(defn- patch-root-impl [vtree patch-fn props]
+(defn- patch-root-impl [context vtree patch-fn props]
   ;; On first render, render synchronously
   ;; Otherwise, set the component at the top as dirty and update its props and patch-fn
   (let [vnode (.-vnode vtree)
         render-queue (.-render-queue vtree)
         async (aget render-queue index-render-queue-async)
-        children (aget vnode index-children)]
+        children (aget vnode index-children)
+        async-fn (o/get context "async-fn")
+        patch-impl (o/get context "patch-fn")]
         ;; comp is nil on first render
     (if-let [comp (aget children 0)]
       (do
@@ -975,8 +982,8 @@
         (when-not (aget render-queue index-render-queue-dirty-flag)
           (aset render-queue index-render-queue-dirty-flag true)
           (if async
-            (async-fn (fn [] (process-render-queue render-queue)))
-            (process-render-queue render-queue))))
+            (async-fn (fn [] (process-render-queue context render-queue)))
+            (process-render-queue context render-queue))))
       (do
         (patch-impl render-queue vnode nil patch-fn props false)
         (process-post-render-hooks render-queue)))))
@@ -1021,6 +1028,13 @@
        (aget index-render-queue-post-render)
        (.push #js [f arg1 arg2 arg3]))))
 
+(defn- post-render-internal
+  "Post render hook for internal use only"
+  [vtree f]
+  (-> (get-render-queue vtree)
+      (aget index-render-queue-post-render-internal)
+      (.push f)))
+
 ;; store hooks for components
 (defonce ^{:private true} comp-hooks (js-obj))
 
@@ -1056,16 +1070,16 @@
    (vtree true))
   ([async]
    (VTree. (new-root-vnode)
-           ;; async + post render hooks
-           #js [async #js []]
+           ;; async + post render hooks + internal post render hooks
+           #js [async #js [] #js []]
            (vswap! vtree-ids inc))))
 
 (defn patch
   "Patch a vtree using component. The optional third argument is the component props."
   ([vtree component]
-   (patch-root-impl vtree component no-props-flag))
+   (patch-root-impl context-dom vtree component no-props-flag))
   ([vtree component props]
-   (patch-root-impl vtree component props)))
+   (patch-root-impl context-dom vtree component props)))
 
 (defn remove [vtree]
   "Remove a vtree from the DOM. A removed vtree can still be patched and added back to the DOM."
