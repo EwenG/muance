@@ -33,7 +33,7 @@ The following code snippet creates a component and renders it on the page:
   (h/div "my first component"))
   
 
-(def vtree (m/vtree)) ;; Creates a virtual DOM tree 
+(defonce vtree (m/vtree)) ;; Creates a virtual DOM tree 
 (m/append-child vtree (.-body js/document)) ;; Appends the virtual DOM tree to the page
 (m/patch vtree example-component) ;; Renders the component
 ```
