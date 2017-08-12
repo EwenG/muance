@@ -79,7 +79,8 @@
 
 (defn- static? [env static-syms x]
   (cond (nil? x) true
-        (boolean? x) true
+        (true? x) true
+        (false? x) true
         (string? x) true
         (keyword? x) true
         (number? x) true
