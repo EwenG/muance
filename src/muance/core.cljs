@@ -156,18 +156,7 @@
 (defn async-fn [f] (.requestAnimationFrame js/window f))
 
 (declare process-render-queue)
-(declare patch-impl)
-
-(def context-dom #js {:insert-fn insert-fn-dom
-                      :remove-node-fn remove-node
-                      :create-element-fn create-element
-                      :handle-event-handler-fn handle-event-handler
-                      :make-handler-0 make-handler-fn-0
-                      :make-handler-1 make-handler-fn-1
-                      :make-handler-2 make-handler-fn-2
-                      :make-handler-3 make-handler-fn-3
-                      :async-fn async-fn
-                      :patch-fn patch-impl})
+(declare context-dom)
 
 (defn state []
   (assert (not (nil? *vnode*)) (str "muance.core/state was called outside a render loop"))
@@ -969,7 +958,7 @@
         children (aget vnode index-children)
         async-fn (o/get context "async-fn")
         patch-impl (o/get context "patch-fn")]
-        ;; comp is nil on first render
+    ;; comp is nil on first render
     (if-let [comp (aget children 0)]
       (do
         (if-let [dirty-comps (aget render-queue index-render-queue-offset)]
@@ -1107,6 +1096,17 @@ parent-node."
       (insert-vnode-before* context-dom parent-node comp nil))
     (aset vnode index-node parent-node)
     (o/set roots (.-id vtree) vtree)))
+
+(def context-dom #js {:insert-fn insert-fn-dom
+                      :remove-node-fn remove-node
+                      :create-element-fn create-element
+                      :handle-event-handler-fn handle-event-handler
+                      :make-handler-0 make-handler-fn-0
+                      :make-handler-1 make-handler-fn-1
+                      :make-handler-2 make-handler-fn-2
+                      :make-handler-3 make-handler-fn-3
+                      :async-fn async-fn
+                      :patch-fn patch-impl})
 
 ;; node identity is the same implies that the svg-namespace value did not change
 
