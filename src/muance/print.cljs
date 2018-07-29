@@ -3,7 +3,7 @@
             [muance.core :as m :include-macros]))
 
 (def vnode-keys [:typeid :parent :node :component :chidren-count :children
-                 :attrs :unmount :key :key-moved :keyed-next-vnode :keymap :keymap-invalid])
+                 :attrs :unmount :remove-hook :key :key-moved :keyed-next-vnode :keymap :keymap-invalid])
 (def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 3 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
 (def comp-data-keys [:component-name :state-ref :svg-namespace :index-in-parent
@@ -54,9 +54,7 @@
                           (when-let [keymap (aget vnode m/index-keymap)]
                             (into #{} (o/getKeys keymap)))
                           (and (m/component? vnode) (= i m/index-comp-data))
-                          (do
-                            (prn (nil? (aget vnode i)))
-                            (format-comp-data (aget vnode i)))
+                          (format-comp-data (aget vnode i))
                           :else (aget vnode i))]
             (recur (assoc! m (get vnode-keys i) val)
                    (inc i)))
@@ -98,7 +96,8 @@
           (persistent! arr))))))
 
 (defn format-vtree [vtree]
-  (format-vnodes (.-vnode vtree)))
+  (when vtree
+    (format-vnodes (.-vnode vtree))))
 
 (defn format-render-queue [vtree]
   (when-let [render-queue (.-render-queue vtree)]
