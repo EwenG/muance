@@ -287,10 +287,14 @@
   (params-with-props '{e :e :as ff})
   )
 
-(defn- refresh-roots [repl-env compiler-env]
-  (cljs.repl/-evaluate
-   repl-env "<cljs repl>" 1
-   "muance.core.refresh_roots();"))
+(defn- refresh-roots [namespaces repl-env compiler-env ns-updated?]
+  (loop [namespaces namespaces]
+    (when-let [n (first namespaces)]
+      (if (ns-updated? n)
+        (cljs.repl/-evaluate
+         repl-env "<cljs repl>" 1
+         "muance.core.refresh_roots();")
+        (recur (rest namespaces))))))
 
 ;; The comp-fn does not need to be a var in order to support reloading because of the level
 ;; of indirection introduced by variadic arity functions
@@ -298,9 +302,6 @@
 (defmacro defcomp
   "Define a Muance stateful component. A Muance component takes zero or one argument."
   [name docstring-or-params & params-body]
-  (when (-> @cljs.env/*compiler* :options :optimizations (= :none))
-    (swap! cljs.env/*compiler* update :replique/ns-watches
-           assoc ana/*cljs-ns* refresh-roots))
   (swap! comp-typeid dec-comp-typeid)
   (let [typeid @comp-typeid
         name (if (string? docstring-or-params)
@@ -354,3 +355,16 @@
         (cljs.core/array ~get-initial-state ~will-receive-props
                          ~did-mount ~did-update ~will-unmount
                          ~remove-hook ~will-update)))))
+
+(defn namespaces-starting-with [ns-start-sym]
+  (for [[k v] (:cljs.analyzer/namespaces @cljs.env/*compiler*)
+        :when (.startsWith ^String (str k) (str ns-start-sym))]
+    k))
+
+(defmacro re-render-on-update [ns-start-sym]
+  (when (-> @cljs.env/*compiler* :options :optimizations (= :none))
+    (let [namespaces (namespaces-starting-with ns-start-sym)]
+      (swap! cljs.env/*compiler* assoc-in
+             [:replique/ns-watches (str "muance-re-render-" ns-start-sym)]
+             (partial refresh-roots namespaces))))
+  nil)
