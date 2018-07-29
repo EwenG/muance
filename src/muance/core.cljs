@@ -924,8 +924,8 @@
 
 (defn- process-post-render-hooks [render-queue]
   (let [post-renders (aget render-queue index-render-queue-post-render)]
-    (.forEach post-renders call-post-render)
-    (aset render-queue index-render-queue-post-render #js []))
+    (aset render-queue index-render-queue-post-render #js [])
+    (.forEach post-renders call-post-render))
   (.forEach (aget render-queue index-render-queue-post-render-internal)
             call-post-render-internal))
 
@@ -1047,7 +1047,8 @@
       (patch-impl render-queue vnode comp
                   (get-comp-render-fn comp)
                   (aget comp index-comp-props)
-                  true))))
+                  true)
+      (process-post-render-hooks render-queue))))
 
 (defn- refresh-roots []
   (o/forEach roots refresh-root))
