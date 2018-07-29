@@ -11,11 +11,22 @@
 
 (deftype Parent [typeid])
 (deftype Component [typeid])
+(deftype KeyedNextVnode [typeid])
 
 (extend-protocol IPrintWithWriter
   Parent
   (-pr-writer [p writer opts]
-    (-write writer "#parent[")
+    (-write writer "#Parent[")
+    (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
+    (-write writer "]"))
+  Component
+  (-pr-writer [p writer opts]
+    (-write writer "#Component[")
+    (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
+    (-write writer "]"))
+  KeyedNextVnode
+  (-pr-writer [p writer opts]
+    (-write writer "#KeyedNextVnode[")
     (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
     (-write writer "]")))
 
@@ -46,10 +57,13 @@
         (if (< i l)
           (let [val (cond (= i m/index-parent-vnode)
                           (when-let [p (aget vnode m/index-parent-vnode)]
-                            (Parent. (aget p m/index-typeid)))
+                            (->Parent (aget p m/index-typeid)))
                           (and (not (m/component? vnode)) (= i m/index-component))
                           (when-let [c (aget vnode m/index-component)]
-                            (Component. (aget c m/index-typeid)))
+                            (->Component (aget c m/index-typeid)))
+                          (= i m/index-key-next-vnode)
+                          (when-let [node (aget vnode m/index-key-next-vnode)]
+                            (->KeyedNextVnode (aget node m/index-typeid)))
                           (= i m/index-keymap)
                           (when-let [keymap (aget vnode m/index-keymap)]
                             (into #{} (o/getKeys keymap)))
