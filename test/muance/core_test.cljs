@@ -4,7 +4,6 @@
             [goog.dom :as dom]
             [goog.object :as o]
             [muance.core :as m :include-macros true]
-            [muance.print :as mprint]
             [muance.attribute :as a]
             [muance.utils-test :as utils]
             [muance.custom-tags :as tag :include-macros true])
@@ -253,10 +252,3 @@
   (reset! vtree (m/vtree))
   (m/append-child @vtree (utils/new-root))
   (m/patch @vtree handlers-c ["503px" click-handler "class5"]))
-
-
-(comment
-
-  (cljs.pprint/pprint (mprint/format-vtree @vtree))
-
-  )
