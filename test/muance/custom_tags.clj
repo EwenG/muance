@@ -1,6 +1,6 @@
 (ns muance.custom-tags
-  (:require [muance.core :as m]))
+  (:require [muance.dom :as dom]))
 
-(m/make-element-macro custom-tag)
+(dom/make-element-macro custom-tag)
 
 

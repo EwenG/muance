@@ -1,9 +1,10 @@
 (ns muance.comp-test
   (:require [cljs.pprint :refer [pprint pp]]
             [cljs.test :refer [deftest testing is run-tests]]
-            [goog.dom :as dom]
             [goog.object :as o]
             [muance.core :as m :include-macros true]
+            [muance.dom :as dom]
+            [muance.diff :as diff]
             [muance.print :as mprint]
             [muance.utils-test :as utils]
             [clojure.test.check :as tc]
@@ -16,8 +17,8 @@
 (m/defcomp empty-comp-f [])
 
 (deftest empy-comp []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree empty-comp-f))
 
 
@@ -29,8 +30,8 @@
        (comp-props-inner-f (+ 1 props))))
 
 (deftest static-comp []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-props-f 50))
 
 
@@ -49,11 +50,9 @@
    (h/p)))
 
 (deftest insert-before []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-insert-before-f false))
-
-
 
 (def keys-vec [[1 3 -2 -5 6 4]
                [3 1 -2 5 0 -6 7 4 8]
@@ -62,7 +61,7 @@
                [0 1 3 4 5]])
 
 (m/defcomp comp-keyed-props [props]
-  (h/p :class "props" (m/text props))
+  (h/p :class "props" (dom/text props))
   (h/div))
 
 (m/defcomp comp-keyed-no-props []
@@ -79,9 +78,9 @@
            (comp-keyed-props k props)))))
 
 (deftest comp-keyed []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 0) :props "comp-props4"})
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
+  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props5"})
   )
 
 
@@ -96,7 +95,7 @@
 
 (defn set-key-prop [type]
   (fn []
-    (let [nodes (array-seq (m/dom-nodes (m/vnode)) 0)]
+    (let [nodes (m/dom-nodes (m/vnode))]
       (doseq [node nodes]
         (let [k (m/key (m/vnode))]
           (o/set node "keyedKey" k)
@@ -105,7 +104,7 @@
 (m/defcomp comp-keyed-generative-no-child [])
 
 (m/hooks comp-keyed-generative-no-child {:did-mount (set-key-prop 1)
-                                      :did-update (set-key-prop 1)})
+                                         :did-update (set-key-prop 1)})
 
 (m/defcomp comp-keyed-generative-child [k]
   (h/div :class k))
@@ -144,7 +143,7 @@
              (comp-keyed-generative-children k k)
              (comp-keyed-generative-children nil))
            (= 4 type)
-           (m/text "ee")))))
+           (dom/text "ee")))))
 
 (def keyed-generator
   (gen/list
@@ -168,25 +167,39 @@
     [(o/get node "keyedType") (o/get node "keyedKey")]))
 
 (def comp-keyed-generative
-    (prop/for-all [keyed-seq keyed-generator]
-                  (reset! vtree (m/vtree false))
-                  (m/append-child @vtree (utils/new-root))
-                  (loop [[keys-seq & rest-keyed] keyed-seq]
-                    (if keys-seq
-                      (let [expected (mapcat keyed-expected keys-seq)]
-                        (m/patch @vtree comp-keyed-generative-f keys-seq)
-                        (let [reorder-node (.querySelector js/document ".reorder")
-                              nodes (array-seq (.-childNodes reorder-node) 0)
-                              result (map keyed-result nodes)]
-                          (if (= expected result)
-                            (recur rest-keyed)
-                            false)))
-                      true))))
+  (prop/for-all [keyed-seq keyed-generator]
+                (swap! vtree utils/new-vtree false)
+                (m/append-child (utils/new-root) @vtree)
+                (loop [[keys-seq & rest-keyed] keyed-seq]
+                  (if keys-seq
+                    (let [expected (mapcat keyed-expected keys-seq)]
+                      (m/patch @vtree comp-keyed-generative-f keys-seq)
+                      (let [reorder-node (.querySelector js/document ".reorder")
+                            nodes (array-seq (.-childNodes reorder-node) 0)
+                            result (map keyed-result nodes)]
+                        (if (= expected result)
+                          (recur rest-keyed)
+                          false)))
+                    true))))
+
+#_[(([3 "10"] [3 "17"] [0 "7"])
+    ([1 "12"] [3 "7"]))]
 
 (comment
+  (mapcat keyed-expected '([3 "10"] [3 "17"] [0 "7"]))
+  (let [reorder-node (.querySelector js/document ".reorder")
+        nodes (array-seq (.-childNodes reorder-node) 0)
+        result (map keyed-result nodes)]
+    result)
+  )
 
-  
-  (tc/quick-check 10 comp-keyed-generative)
+(deftest ttt []
+  (swap! vtree utils/new-vtree false)
+  (m/append-child (utils/new-root) @vtree)
+  (m/patch @vtree comp-keyed-generative-f '([3 "10"] [3 "17"] [0 "7"])))
+
+(comment
+  (tc/quick-check 100 comp-keyed-generative)
   )
 
 
@@ -195,7 +208,8 @@
 
 
 (def keys-vec2 [[1]
-                [-1 1]])
+                [-1 1]
+                [0]])
 
 (m/defcomp comp-attributes-props [props]
   (h/p :class "props"
@@ -220,7 +234,7 @@
                                   (prn :component-name (m/component-name (m/vnode)))
                                   (prn :node (m/dom-node (m/vnode)))
                                   )}
-       (m/text props)))
+       (dom/text props)))
 
 (m/hooks comp-attributes-props
          {:did-mount (fn [props state]
@@ -268,9 +282,9 @@
            (comp-attributes-props k props)))))
 
 (deftest comp-attributes []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props5"})
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
+  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 2) :props "comp-props7"})
   )
 
 
@@ -280,10 +294,10 @@
 
 (m/defcomp render-queue-depth2 [props]
   (h/div :aria-state (m/state)
-         :class (:depth1-state props)
+         :class (:depth-1-state props)
          :style {:width "300px" :height "300px" :border "1px solid green"}
          ::m/on [:click render-queue-click]
-         (m/text props)))
+         (dom/text props)))
 
 (m/defcomp render-queue-depth1 [props]
   (h/p :class (m/state)
@@ -308,7 +322,7 @@
           :did-mount (fn [props state]
                        (let [node (m/dom-node (m/vnode))]
                          (o/set node (m/component-name (m/vnode))
-                                (m/set-interval (m/vnode) #(swap! % inc) 1000))))
+                                (dom/set-interval (m/vnode) #(swap! % inc) 1000))))
           :will-unmount (fn [props state]
                           (let [node (m/dom-node (m/vnode))
                                 interval-id (o/get node (m/component-name (m/vnode)))]
@@ -317,29 +331,29 @@
                             (.clearInterval js/window interval-id)))})
 
 (deftest render-queue []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree render-queue-depth0 {:depth1 41 :depth2 "depth3-props" :display true}))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
+  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth3-props" :display true}))
 
 
 
 
 
 (m/defcomp comp-svg-inner []
-  (prn m/*svg-namespace*)
+  (prn diff/*svg-namespace*)
   (h/rect :width "500px" :height "500px"
           ::m/on [:click (fn [e state-ref]
                            (swap! state-ref inc))]
           (h/foreignObject (h/p 
-                            (m/text "eerrgg")))))
+                            (dom/text "eerrgg")))))
 
 (m/defcomp comp-svg-top []
   (h/svg :width "500px" :height "500px" (comp-svg-inner))
   (h/a))
 
 (deftest comp-svg []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-svg-top))
 
 
@@ -352,7 +366,7 @@
     (h/p
      :style {:width "500px" :height "500px"}
      ::m/on [:click exception-click-handler]
-     (m/text comp-k " " (m/state)))))
+     (dom/text comp-k " " (m/state)))))
 
 (m/hooks comp-exception-keyed {:will-update (fn [b]
                                               (when (= (m/key (m/vnode)) "3")
@@ -376,8 +390,8 @@
         (h/p) (comp-exception-keyed 2 nil))))
 
 (deftest comp-exception []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-exception-f true))
 
 
@@ -385,22 +399,16 @@
 (m/defcomp comp-prevent-node-removal-f [b]
   (if b
     (h/p
-     ::m/hooks {:remove-hook (fn [rem-node] (m/remove-node rem-node))}
+     ::m/hooks {:remove-hook (fn [rem-node] (dom/remove-node rem-node))}
      (h/div
       ::m/hooks {:remove-hook (fn [rem-node]
-                                (m/set-timeout (m/vnode)
-                                               (fn [state-ref] (m/remove-node rem-node))
-                                               3000))}))
+                                (dom/set-timeout (m/vnode)
+                                                 (fn [state-ref] (dom/remove-node rem-node))
+                                                 3000))}))
     (h/p)))
 
 (deftest comp-prevent-node-removal []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-prevent-node-removal-f true))
 
-(comment
-
-  (cljs.pprint/pprint (mprint/format-vtree @vtree))
-  (cljs.pprint/pprint (mprint/format-render-queue @vtree))
-  
-  )

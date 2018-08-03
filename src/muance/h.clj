@@ -1,7 +1,7 @@
 (ns muance.h
   (:refer-clojure :exclude [map meta time set symbol use filter])
   (:require [clojure.set]
-            [muance.core :as m]))
+            [muance.dom :as dom]))
 
 (def html-elements #{'a 'abbr 'acronym 'address 'applet 'area 'article 'aside 'audio 'b 'base
                      'basefont 'bdi 'bdo 'big 'blockquote 'body 'br 'button 'canvas 'caption
@@ -37,7 +37,7 @@
 (defmacro def-element-macros []
   `(do
      ~@(for [tag element-macros]
-         `(m/make-element-macro ~tag))))
+         `(dom/make-element-macro ~tag))))
 
 (def-element-macros)
 

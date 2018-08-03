@@ -1,9 +1,8 @@
 (ns muance.core-test
-  (:require [cljs.pprint :refer [pprint pp]]
-            [cljs.test :refer [deftest testing is run-tests]]
-            [goog.dom :as dom]
+  (:require [cljs.test :refer [deftest testing is run-tests]]
             [goog.object :as o]
             [muance.core :as m :include-macros true]
+            [muance.dom :as dom :include-macros true]
             [muance.attribute :as a]
             [muance.utils-test :as utils]
             [muance.custom-tags :as tag :include-macros true])
@@ -18,8 +17,8 @@
   (root-static-f))
 
 (deftest root-static []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree root-static-c))
 
 
@@ -31,8 +30,8 @@
   (static-f))
 
 (deftest static []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree static-c))
 
 
@@ -52,8 +51,8 @@
   (root-nodes-f nodes))
 
 (deftest root-nodes []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree root-nodes-c (get nodes-vec 0))
   (m/patch @vtree root-nodes-c (get nodes-vec 1))
   (m/patch @vtree root-nodes-c (get nodes-vec 2))
@@ -80,8 +79,8 @@
   (keyed-f keys))
 
 (deftest keyed []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree keyed-c (get keys-vec 0))
   (m/patch @vtree keyed-c (get keys-vec 1))
   (m/patch @vtree keyed-c (get keys-vec 2))
@@ -92,8 +91,8 @@
 
 
 (deftest duplicate-key []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree keyed-c [1])
   (m/patch @vtree keyed-c [1 1])
   (m/patch @vtree keyed-c [2 3 1 1 1]))
@@ -109,8 +108,8 @@
   (mismatch-key-typeid-f x))
 
 (deftest mismatch-key-typeid []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree mismatch-key-typeid-c true)
   (m/patch @vtree mismatch-key-typeid-c false))
 
@@ -126,8 +125,8 @@
   (match-key-typeid-f x))
 
 (deftest match-key-typeid []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree match-key-typeid-c true)
   (m/patch @vtree match-key-typeid-c false))
 
@@ -148,34 +147,33 @@
   (h/input :type "checkbox" :value checkbox-value :checked checkbox-checked)
   (h/input :type "file" :name "rr" :multiple true)
   (h/select
-   (h/option :value "val1")
+   (h/option :value "val1" "rr")
    (h/option :value "val2" :selected selected)))
 
 (m/defcomp attrs-c [x]
   (attrs-f x))
 
 (deftest attrs []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree attrs-c
-                {:class1 67 :dyn-attr "val3" :bg-cond true :color "green"
-                 :input-value "tt7"
+                {:class1 68 :dyn-attr "val4" :bg-cond true :color "green"
+                 :input-value "tt8"
                  :for-val "rr1"
                  :checkbox-value nil :checkbox-checked "e"
-                 :selected false})
-  )
+                 :selected true}))
 
 
 
 (defn text-f [x]
-  (h/div (if x (m/text "e") (h/p)) "<p></p>"))
+  (h/div (if x (dom/text "e") (h/p)) "<p></p>"))
 
 (m/defcomp text-c [x]
   (text-f x))
 
 (deftest text []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree text-c true))
 
 
@@ -187,8 +185,8 @@
   (custom-tag-f))
 
 (deftest custom-tag []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree custom-tag-c))
 
 
@@ -209,8 +207,8 @@
   (svg-f href))
 
 (deftest svg []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree svg-c "rr4"))
 
 
@@ -223,8 +221,8 @@
   (custom-css-f bg))
 
 (deftest custom-css []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree custom-css-c "red"))
 
 
@@ -239,16 +237,19 @@
   (prn "mouseover2")
   (prn state-ref))
 
-(defn handlers-f [[w handler c]]
+(defn handlers-f [[w handler c a]]
   (h/div
    :class c
-   ::m/on [[:click handler "attr1" 2 "attr3"] [:mouseover mouseover-handler]]
+   ::m/on [[:click handler "attr1" 3 a 4] [:mouseover mouseover-handler]]
    :style {:width w :height "500px"}))
 
 (m/defcomp handlers-c [x]
   (handlers-f x))
 
 (deftest handlers []
-  (reset! vtree (m/vtree))
-  (m/append-child @vtree (utils/new-root))
-  (m/patch @vtree handlers-c ["503px" click-handler "class5"]))
+  (swap! vtree utils/new-vtree)
+  (m/append-child (utils/new-root) @vtree)
+  (m/patch @vtree handlers-c ["503px" click-handler "class5" "a5"]))
+
+;; Exceptions in tests are caught and *e is not set
+
