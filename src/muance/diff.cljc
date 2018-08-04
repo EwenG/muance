@@ -7,55 +7,55 @@
             [muance.context :as context])
   #?(:clj (:import [java.util ArrayList HashMap])))
 
-(def index-typeid 0)
-(def index-parent-vnode 1)
-(def index-node 2)
-(def index-component 3)
-(def index-children-count 4)
-(def index-children 5)
-(def index-attrs 6)
+(def ^:const index-typeid 0)
+(def ^:const index-parent-vnode 1)
+(def ^:const index-node 2)
+(def ^:const index-component 3)
+(def ^:const index-children-count 4)
+(def ^:const index-children 5)
+(def ^:const index-attrs 6)
 ;; Unmount is stored on the node since it must be called when one of the parents of the node
 ;; is removed
-(def index-unmount 7)
-(def index-remove-hook 8)
-(def index-key 9)
+(def ^:const index-unmount 7)
+(def ^:const index-remove-hook 8)
+(def ^:const index-key 9)
 ;; A slot which stores one of two flags:
 ;; - moved-flag
 ;; - moving-flag
 ;; - new-flag
 ;; See the documentation for these two flags for more details
-(def index-key-moved 10)
+(def ^:const index-key-moved 10)
 ;; keep track of the vnode sibling in order to reorder keyed vnodes duting child nodes
 ;; reconciliation
-(def index-key-next-vnode 11)
-(def index-keymap 12)
+(def ^:const index-key-next-vnode 11)
+(def ^:const index-keymap 12)
 ;; When a keyed node is removed, the keymap is marked as invalid. Invalid keymaps are
 ;; cleaned when the close function of the node is called
-(def index-keymap-invalid 13)
+(def ^:const index-keymap-invalid 13)
 
-(def index-text 3)
+(def ^:const index-text 3)
 
 ;; component specific data
-(def index-comp-data 2)
-(def index-comp-props 3)
-(def index-comp-state 6)
+(def ^:const index-comp-data 2)
+(def ^:const index-comp-props 3)
+(def ^:const index-comp-state 6)
 
-(def index-comp-data-name 0)
-(def index-comp-data-state-ref 1)
-(def index-comp-data-svg-namespace 2)
+(def ^:const index-comp-data-name 0)
+(def ^:const index-comp-data-state-ref 1)
+(def ^:const index-comp-data-svg-namespace 2)
 ;; index-in-parent is used when rendering a component after its local state has changed.
 ;; we must initialize the children-count slot to the same value than index-in-parent
-(def index-comp-data-index-in-parent 3)
+(def ^:const index-comp-data-index-in-parent 3)
 ;; the depth of the component is stored to be able to init the component-state var when a
 ;; component is re-rendered because of a local state change
-(def index-comp-data-depth 4)
-(def index-comp-data-dirty-flag 5)
+(def ^:const index-comp-data-depth 4)
+(def ^:const index-comp-data-dirty-flag 5)
 
-(def index-render-queue-async-fn 0)
-(def index-render-queue-post-render 1)
-(def index-render-queue-post-render-internal 2)
-(def index-render-queue-dirty-flag 3)
-(def index-render-queue-offset 4)
+(def ^:const index-render-queue-async-fn 0)
+(def ^:const index-render-queue-post-render 1)
+(def ^:const index-render-queue-post-render-internal 2)
+(def ^:const index-render-queue-dirty-flag 3)
+(def ^:const index-render-queue-offset 4)
 
 (def ^{:dynamic true} *component* nil)
 ;; Whether the current vnode has just been created or not
@@ -122,7 +122,7 @@
 
 (defn component? [vnode]
   (let [typeid (a/aget vnode index-typeid)]
-    (and typeid (not (string? typeid)) (< typeid 0))))
+    (and typeid (not #?(:cljs (string? typeid) :clj (class? typeid))) (< typeid 0))))
 
 (defn dirty-component? [vnode]
   (a/aget vnode index-comp-data index-comp-data-dirty-flag))
@@ -545,14 +545,14 @@
   (close-impl did-mount did-update)
   (set! *vnode* (a/aget *vnode* index-parent-vnode)))
 
-(def index-hooks-typeid 0)
-(def index-hooks-get-initial-state 1)
-(def index-hooks-will-receive-props 2)
-(def index-hooks-did-mount 3)
-(def index-hooks-did-update 4)
-(def index-hooks-will-unmount 5)
-(def index-hooks-remove 6)
-(def index-hooks-will-update 7)
+(def ^:const index-hooks-typeid 0)
+(def ^:const index-hooks-get-initial-state 1)
+(def ^:const index-hooks-will-receive-props 2)
+(def ^:const index-hooks-did-mount 3)
+(def ^:const index-hooks-did-update 4)
+(def ^:const index-hooks-will-unmount 5)
+(def ^:const index-hooks-remove 6)
+(def ^:const index-hooks-will-update 7)
 
 (defn open-comp [component-name typeid props? props comp-fn key hooks]
   (assert (not (nil? *vnode*))
@@ -991,7 +991,5 @@
 
 ;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
 ;; hooks-map -> Working with the Clojure :elide-meta option?
-;; javafx -> new element -> Class/forName - tag as class instead of string
 ;; handlers / params - remove dynamic vars to return parameters
 ;; native arithmetic
-;; reflection warnings

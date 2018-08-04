@@ -52,7 +52,9 @@
 
      context/ILocalState
      (context/-remove-muance-watcher [this]
-       (set! muance-watcher nil))))
+       (set! muance-watcher nil))
+     (context/-muance-watcher [this]
+       muance-wtacher)))
 
 #?(:clj
    (declare notify-watches))
@@ -168,11 +170,13 @@
 
      context/ILocalState
      (context/-remove-muance-watcher [this]
-       (set! muance-watcher nil))))
+       (set! muance-watcher nil))
+     (context/-muance-watcher [this]
+       muance-watcher)))
 
 #?(:clj
    (defn notify-watches [^LocalStateAtom a old-val new-val]
-     (let [muance-watcher (.-muance-watcher a)
+     (let [muance-watcher (context/-muance-watcher a)
            ws (.getWatches a)]
        (when muance-watcher
          (muance-watcher (.-component-data a) new-val))

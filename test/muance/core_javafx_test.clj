@@ -17,7 +17,7 @@
 
 (defn root-static-f [x]
   (j/group
-   ))
+   (j/button)))
 
 (m/defcomp root-static-c [x]
   (root-static-f x))

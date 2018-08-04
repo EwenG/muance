@@ -8,4 +8,6 @@
   (create-element [tag]))
 
 (defprotocol ILocalState
-  (-remove-muance-watcher [this]))
+  (-remove-muance-watcher [this])
+  ;; mutable fields require a getter
+  (-muance-watcher [this]))

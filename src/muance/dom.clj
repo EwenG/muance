@@ -1,6 +1,7 @@
 (ns muance.dom
   (:require [clojure.string :as string]
-            [muance.core :as m]))
+            [muance.core :as m]
+            [muance.attributes :as attributes]))
 
 (defonce ^:private typeid (atom 1))
 
@@ -85,42 +86,6 @@
         (keyword? x) (name x)
         :else `(cljs.core/str ~x)))
 
-(def ^{:private true} props-to-rename
-  {:class :className
-   :for :htmlFor
-   :accept-charset :acceptCharset
-   :http-equiv :httpEquiv})
-
-(defn- rename-prop [[k v :as prop]]
-  (if-let [new-k (get props-to-rename k)]
-    [new-k v]
-    prop))
-
-(defn- attributes [body]
-  (let [attrs (->> (partition 2 body)
-                   (take-while (comp keyword? first))
-                   (map rename-prop))]
-    (when (not (empty? attrs))
-      (let [attrs-keys (map first attrs)]
-        (assert (apply distinct? attrs-keys)
-                (str "duplicate attributes: " (pr-str attrs-keys)))
-        (let [attrs-keys (remove #(or (= ::m/hooks %) (= ::m/key %) (= ::m/on %)) attrs-keys)]
-          (when (not (empty? attrs-keys))
-            (assert (apply distinct? (map name attrs-keys))
-                    (str "duplicate attributes: " (pr-str attrs-keys)))))))
-    (into {} (map vec attrs))))
-
-(defn- handler? [h]
-  (and (vector? h) (keyword? (first h))))
-
-(defn- validate-attributes [{:keys [::m/hooks style ::m/on] :as attributes}]
-  (when (contains? attributes ::m/hooks) (assert (map? hooks)))
-  (when (contains? attributes :style) (assert (map? style)))
-  (when (contains? attributes ::m/on) (assert (or (handler? on) (every? handler? on)))))
-
-(defn- body-without-attributes [body attributes]
-  (drop (* 2 (count attributes)) body))
-
 (defn- class-call [env class]
   (if (vector? class)
     (if (every? (partial static? env) class)
@@ -157,7 +122,7 @@
 
 (defn- on-calls [env ons]
   (let [static? (partial static? env)
-        ons (if (handler? ons) [ons] ons)]
+        ons (if (attributes/handler? ons) [ons] ons)]
     (map (fn [[k f & args]]
            (if (and (static? f) (every? static? args))
              (let [l (count args)]
@@ -237,9 +202,10 @@
         {key ::m/key
          {will-update :will-update will-unmount :will-unmount
           remove-hook :remove-hook
-          did-mount :did-mount did-update :did-update} ::m/hooks :as attrs} (attributes body)
-        _ (validate-attributes attrs)
-        body (body-without-attributes body attrs)]
+          did-mount :did-mount did-update :did-update} ::m/hooks
+         :as attrs} (attributes/attributes body)
+        _ (attributes/validate-attributes attrs)
+        body (attributes/body-without-attributes body attrs)]
     (with-svg-namespace tag
       `((muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~remove-hook)
         ~@(attribute-calls env tag attrs)
