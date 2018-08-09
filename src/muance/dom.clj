@@ -209,7 +209,7 @@
     (with-svg-namespace tag
       `((muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~remove-hook)
         ~@(attribute-calls env tag attrs)
-        ~@(map compile-form body)
+        ~@(doall (map compile-form body))
         (muance.diff/close ~did-mount ~did-update)))))
 
 (defmacro text
