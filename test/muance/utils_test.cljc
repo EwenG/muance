@@ -4,9 +4,6 @@
             #?(:cljs [muance.dom :as dom])
             #?(:clj [muance.javafx :as javafx])))
 
-#?(:clj
-   (defonce stage nil))
-
 #?(:cljs
    (defn new-root []
      (when-let [root (.getElementById js/document "root")]
@@ -23,14 +20,17 @@
 #?(:cljs
    (defn new-vtree
      ([vtree]
-      (new-vtree vtree false))
-     ([vtree async]
+      (new-vtree vtree nil))
+     ([vtree vtree-params]
       (when vtree
         (m/remove vtree))
-      (dom/vtree {:async async}))))
+      (dom/vtree vtree-params))))
 
 #?(:clj
-   (defn new-vtree [vtree]
-     (when vtree
-       (m/remove vtree))
-     (javafx/vtree)))
+   (defn new-vtree
+     ([vtree]
+      (new-vtree nil))
+     ([vtree vtree-params]
+      (when vtree
+        (m/remove vtree))
+      (javafx/vtree vtree-params))))
