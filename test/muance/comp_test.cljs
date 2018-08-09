@@ -182,22 +182,6 @@
                           false)))
                     true))))
 
-#_[(([3 "10"] [3 "17"] [0 "7"])
-    ([1 "12"] [3 "7"]))]
-
-(comment
-  (mapcat keyed-expected '([3 "10"] [3 "17"] [0 "7"]))
-  (let [reorder-node (.querySelector js/document ".reorder")
-        nodes (array-seq (.-childNodes reorder-node) 0)
-        result (map keyed-result nodes)]
-    result)
-  )
-
-(deftest ttt []
-  (swap! vtree utils/new-vtree false)
-  (m/append-child (utils/new-root) @vtree)
-  (m/patch @vtree comp-keyed-generative-f '([3 "10"] [3 "17"] [0 "7"])))
-
 (comment
   (tc/quick-check 100 comp-keyed-generative)
   )
