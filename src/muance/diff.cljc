@@ -50,12 +50,16 @@
 ;; component is re-rendered because of a local state change
 (def ^:const index-comp-data-depth 4)
 (def ^:const index-comp-data-dirty-flag 5)
+;; *render-flag* is put here when the flag has been rendered. This must only be touched by the
+;; rendering thread !
+(def ^:const index-comp-data-rendered-flag 6)
 
-(def ^:const index-render-queue-async-fn 0)
-(def ^:const index-render-queue-post-render 1)
-(def ^:const index-render-queue-post-render-internal 2)
+(def ^:const index-render-queue-fn 0)
+(def ^:const index-render-queue-processing-flag 1)
+(def ^:const index-render-queue-pending-flag 2)
 (def ^:const index-render-queue-dirty-flag 3)
-(def ^:const index-render-queue-offset 4)
+(def ^:const index-render-queue-post-render-hooks 4)
+(def ^:const index-render-queue-offset 5)
 
 (def ^{:dynamic true} *component* nil)
 ;; Whether the current vnode has just been created or not
@@ -106,7 +110,9 @@
 ;; reorder keyed nodes.
 ;; This flag changes on every render pass because this helps keeping things consitent, even
 ;; when an exception occurs
-(defonce ^{:dynamic true} *new-flag* nil)
+(def ^{:dynamic true} *new-flag* nil)
+;; A flag used to mark a component has rendered while processing the render-queue
+(def ^:dynamic *rendered-flag* nil)
 ;; Set on a component "props" slot when this component does not have props. This is useful to
 ;; differentiate between "nil" props and no props at all. When a component does not have props,
 ;; no props are passed to the patch function when it is re-rendered.
@@ -118,14 +124,12 @@
 (def ^{:dynamic true} *state* nil)
 (def ^{:dynamic true} *vnode* nil)
 
-(declare process-render-queue)
-
 (defn component? [vnode]
   (let [typeid (a/aget vnode index-typeid)]
     (and typeid (not #?(:cljs (string? typeid) :clj (class? typeid))) (< typeid 0))))
 
-(defn dirty-component? [vnode]
-  (a/aget vnode index-comp-data index-comp-data-dirty-flag))
+(defn already-rendered-component? [vnode]
+  (identical? *rendered-flag* (a/aget vnode index-comp-data index-comp-data-rendered-flag)))
 
 (defn component-name
   "Return the fully qualified name of the node's component, as a string."
@@ -175,25 +179,10 @@
     (let [vnode (a/aget stateful-data 0)
           comp-fn (a/aget stateful-data 1)
           render-queue (a/aget stateful-data 2)
-          async-fn (a/aget render-queue index-render-queue-async-fn)
+          render-queue-fn (a/aget render-queue index-render-queue-fn)
           component-depth (a/aget vnode index-comp-data index-comp-data-depth)]
-      (when (not (dirty-component? vnode))
-        (a/aset (a/aget vnode index-comp-data) index-comp-data-dirty-flag true)
-        (if-let [dirty-comps (a/aget render-queue (+ component-depth index-render-queue-offset))]
-          (do (a/add dirty-comps (a/aget vnode index-comp-props))
-              (a/add dirty-comps comp-fn)
-              (a/add dirty-comps vnode))
-          (a/aset render-queue (+ component-depth index-render-queue-offset)
-                  #?(:cljs #js [(a/aget vnode index-comp-props) comp-fn vnode]
-                     :clj (doto (ArrayList.)
-                            (.add (a/aget vnode index-comp-props))
-                            (.add comp-fn)
-                            (.add vnode)))))
-        (when-not (a/aget render-queue index-render-queue-dirty-flag)
-          (a/aset render-queue index-render-queue-dirty-flag true)
-          (if async-fn
-            (async-fn (fn [] (process-render-queue render-queue)))
-            (process-render-queue render-queue)))))))
+      (render-queue-fn render-queue (a/aget vnode index-comp-props) comp-fn vnode
+                       component-depth false))))
 
 (defn parent-node [parent]
   (if (component? parent)
@@ -586,13 +575,15 @@
         (a/aset *vnode* index-comp-props (if props? *props* no-props-flag))
         (a/aset *vnode* index-comp-data
                 #?(:cljs #js[component-name state-ref *svg-namespace*
-                             vnode-index *component-depth*]
-                   :clj (doto (ArrayList.)
+                             vnode-index *component-depth* nil nil]
+                   :clj (doto (ArrayList. 6)
                           (.add component-name)
                           (.add state-ref)
                           (.add *svg-namespace*)
                           (.add vnode-index)
-                          (.add *component-depth*))))
+                          (.add *component-depth*)
+                          (.add nil)
+                          (.add nil))))
         ;; call will-unmount at the end to keep things consistent in case of an exception
         ;; in will-unmount
         (when prev
@@ -863,69 +854,30 @@
       (= l 3) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2))
       (= l 4) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2) (a/aget post-render 3)))))
 
-(defn call-post-render-internal [post-render]
-  (post-render))
-
 (defn process-post-render-hooks [render-queue]
-  (let [post-renders (a/aget render-queue index-render-queue-post-render)]
-    (a/aset render-queue index-render-queue-post-render #?(:cljs #js [] :clj (ArrayList.)))
-    (a/forEach post-renders call-post-render))
-  (a/forEach (a/aget render-queue index-render-queue-post-render-internal)
-             call-post-render-internal))
+  (let [post-renders (a/aget render-queue index-render-queue-post-render-hooks)]
+    (a/aset render-queue index-render-queue-post-render-hooks
+            #?(:cljs #js [] :clj (ArrayList.)))
+    (a/forEach post-renders call-post-render)))
 
 (defn process-render-queue [render-queue]
-  (a/aset render-queue index-render-queue-dirty-flag nil)
   (let [l (a/length render-queue)]
     (loop [i index-render-queue-offset]
       (when (< i l)
-        (when-let [dirty-comps (a/aget render-queue i)]
+        (when-let [comps (a/aget render-queue i)]
           (loop []
-            (let [vnode (a/pop dirty-comps)
-                  comp-fn (a/pop dirty-comps)
-                  props (a/pop dirty-comps)]
-              ;; stop when there is no more dirty component
-              (when (and vnode (dirty-component? vnode))
-                (patch-impl render-queue
-                            (a/aget vnode index-parent-vnode)
-                            vnode
-                            comp-fn props false)
+            (let [vnode (a/pop comps)
+                  comp-fn (a/pop comps)
+                  props (a/pop comps)]
+              (when vnode
+                (when (not (already-rendered-component? vnode))
+                  (patch-impl render-queue
+                              (a/aget vnode index-parent-vnode)
+                              vnode
+                              comp-fn props false))
                 (recur)))))
         (recur (inc i)))))
   (process-post-render-hooks render-queue))
-
-(defn patch-root-impl [vtree patch-fn props]
-  ;; On first render, render synchronously
-  ;; Otherwise, set the component at the top as dirty and update its props and patch-fn
-  (let [vnode (vtree/vnode vtree)
-        the-render-queue (vtree/render-queue vtree)
-        async-fn (a/aget the-render-queue index-render-queue-async-fn)
-        children (a/aget vnode index-children)]
-    ;; comp is nil on first render
-    (if-let [comp (a/aget children 0)]
-      (do
-        (if-let [dirty-comps (a/aget the-render-queue index-render-queue-offset)]
-          (do
-            (a/aset dirty-comps 0 props)
-            (a/aset dirty-comps 1 patch-fn)
-            (a/aset dirty-comps 2 comp))
-          (a/aset the-render-queue index-render-queue-offset
-                  #?(:cljs #js [props patch-fn comp]
-                     :clj (doto (ArrayList.)
-                            (.add props)
-                            (.add patch-fn)
-                            (.add comp)))))
-        (a/aset (a/aget comp index-comp-data) index-comp-data-dirty-flag true)
-        (when-not (a/aget the-render-queue index-render-queue-dirty-flag)
-          (a/aset the-render-queue index-render-queue-dirty-flag true)
-          (if async-fn
-            (async-fn (fn [] (process-render-queue the-render-queue)))
-            (process-render-queue the-render-queue))))
-      (if (or (nil? async-fn) (vtree/synchronous-first-render vtree))
-        (do (patch-impl the-render-queue vnode nil patch-fn props false)
-            (process-post-render-hooks the-render-queue))
-        (async-fn (fn []
-                    (patch-impl the-render-queue vnode nil patch-fn props false)
-                    (process-post-render-hooks the-render-queue)))))))
 
 (defn get-render-queue [vnode]
   (cond (satisfies? vtree/VTree vnode)
@@ -940,13 +892,6 @@
                                                             index-comp-data-state-ref)
                   (.-component-data)
                   (a/aget 2))))
-
-(defn post-render-internal
-  "Post render hook for internal use only"
-  [vtree f]
-  (-> (get-render-queue vtree)
-      (a/aget index-render-queue-post-render-internal)
-      (a/add f)))
 
 ;; store hooks for components
 (defonce comp-hooks #?(:cljs (js-obj) :clj (HashMap.)))
@@ -988,8 +933,15 @@
 
 ;; comp-hooks stores the component-id of its target component. When redefining a component, its hooks are lost
 
+;; Synchronous rendering is mainly useful for testing. Synchronous rendering cannot be a parameter to patch since local state updates would not be impacted
 
 ;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
 ;; hooks-map -> Working with the Clojure :elide-meta option?
-;; handlers / params - remove dynamic vars to return parameters
 ;; native arithmetic
+;; component-hooks -> atom (thread safety)
+;; ensure that core.cljc API is called during the render loop (thread safety)
+;; global post-render function (set in the vtree) for dev purpose
+;; javafx synchronous rendering -> ArrayBlockingQueue of size 1
+;; post-render-hook as parameters to patch
+;; remove vtree/synchronous-first-render
+;; Add synchronous parameters to vtree

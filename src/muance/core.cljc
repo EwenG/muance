@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [remove key])
   (:require [cljs.repl]
             [muance.diff :as diff]
+            [muance.vtree :as vtree]
             [muance.objects :as o]
             [muance.arrays :as a])
   #?(:clj (:import [java.util ArrayList])))
@@ -159,6 +160,7 @@
   (assert vnode "muance.core/key expects a vnode.")
   (a/aget vnode diff/index-key))
 
+;; Useful to systematically execute an action on the DOM after it has been updated
 (defn post-render
   "Registers a function to be executed after the next Muance render pass. Takes a vnode or vtree,
   the function to be executed and up to three optional parameters to be passed to the 
@@ -166,14 +168,14 @@
   ([vnode f]
    (assert vnode "muance.core/post-render expects a vnode.")
    (-> (diff/get-render-queue vnode)
-       (a/aget diff/index-render-queue-post-render)
+       (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f]
                  :clj (doto (ArrayList.)
                         (.add f))))))
   ([vnode f arg1]
    (assert vnode "muance.core/post-render expects a vnode.")
    (-> (diff/get-render-queue vnode)
-       (a/aget diff/index-render-queue-post-render)
+       (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f arg1]
                  :clj (doto (ArrayList.)
                         (.add f)
@@ -181,7 +183,7 @@
   ([vnode f arg1 arg2]
    (assert vnode "muance.core/post-render expects a vnode.")
    (-> (diff/get-render-queue vnode)
-       (a/aget diff/index-render-queue-post-render)
+       (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f arg1 arg2]
                  :clj (doto (ArrayList.)
                         (.add f)
@@ -190,7 +192,7 @@
   ([vnode f arg1 arg2 arg3]
    (assert vnode "muance.core/post-render expects a vnode.")
    (-> (diff/get-render-queue vnode)
-       (a/aget diff/index-render-queue-post-render)
+       (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f arg1 arg2 arg3]
                  :clj (doto (ArrayList.)
                         (.add f)
@@ -216,9 +218,19 @@
 (defn patch
   "Patch a vtree using component. The optional third argument is the component props."
   ([vtree component]
-   (diff/patch-root-impl vtree component diff/no-props-flag))
+   (patch vtree component diff/no-props-flag))
   ([vtree component props]
-   (diff/patch-root-impl vtree component props)))
+   (let [render-queue (vtree/render-queue vtree)
+         render-queue-fn (a/aget render-queue diff/index-render-queue-fn)]
+     (render-queue-fn #?(:cljs #js [(vtree/render-queue vtree) props component
+                                    (vtree/vnode vtree) -1 false]
+                         :clj (doto (ArrayList. 6)
+                                (.add (vtree/render-queue vtree))
+                                (.add props)
+                                (.add component)
+                                (.add (vtree/vnode vtree))
+                                (.add -1)
+                                (.add (vtree/synchronous? vtree))))))))
 
 (defn state []
   (assert (not (nil? diff/*vnode*)) (str "muance.core/state was called outside of render loop"))
