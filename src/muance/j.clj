@@ -6,7 +6,8 @@
                     {:name 'scroll-pane :tag 'javafx.scene.control.ScrollPane
                      :children-getter 'contentProperty}
                     {:name 'group :tag 'javafx.scene.Group}
-                    {:name 'button :tag 'javafx.scene.control.Button}})
+                    {:name 'button :tag 'javafx.scene.control.Button}
+                    {:name 'textField :tag 'javafx.scene.control.TextField}})
 
 (def element-macros javafx-nodes)
 
