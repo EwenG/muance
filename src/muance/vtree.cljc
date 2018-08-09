@@ -5,4 +5,4 @@
   (id [this])
   (vnode [this])
   (render-queue [this])
-  (synchronous-first-render [this]))
+  (synchronous? [this]))
