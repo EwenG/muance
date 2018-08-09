@@ -32,3 +32,5 @@
             (diff/process-post-render-hooks render-queue))
           (recur))))
     (.stop this)))
+
+;; Reloading this namespace may require restarting the REPL and AOT compiling it again. This is why it is put apart (to avoid classloading/AOT issues)

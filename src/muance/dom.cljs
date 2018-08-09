@@ -3,6 +3,7 @@
             [muance.vtree :as vtree]
             [muance.context :as context]
             [muance.core :as core]
+            [muance.arrays :as a]
             [goog.object :as o]))
 
 (def ^:const svg-ns "http://www.w3.org/2000/svg")
@@ -189,12 +190,12 @@
   (when (and (> diff/*new-node* 0) (not (nil? val)))
     (set-style-custom key (str val))))
 
-(deftype DOMVTree [id vnode render-queue]
+(deftype DOMVTree [id vnode render-queue synchronous?]
   vtree/VTree
   (vtree/id [this] id)
   (vtree/vnode [this] vnode)
   (vtree/render-queue [this] render-queue)
-  (vtree/synchronous-first-render [this] true)
+  (vtree/synchronous? [this] synchronous?)
   core/VTree
   (core/remove [vtree]
     (let [vnode (vtree/vnode vtree)
@@ -243,17 +244,77 @@
 (defn- new-root-vnode []
   #js [nil nil (.createDocumentFragment js/document) nil 0 #js []])
 
-(defn async-fn [f]
-  (.requestAnimationFrame js/window f))
+(defn- handle-component-update [in]
+  (let [render-queue (a/aget in 0)
+        props (a/aget in 1)
+        comp-fn (a/aget in 2)
+        vnode (a/aget in 3)
+        ;; depth == -1 means this was a call to muance.core/patch. In this case, the vnode is
+        ;; the vtree vnode. We don't directly pass the vnode of the component at depth 0 because
+        ;; it is nil before the firs rendering and this would cause potential concurrency
+        ;; (multiple threads) problems
+        depth (a/aget in 4)
+        comp (if (= depth -1)
+               (a/aget vnode diff/index-children 0)
+               vnode)
+        synchronous? (a/aget in 5)
+        processing-flag (a/aget render-queue diff/index-render-queue-processing-flag)
+        dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)]
+    ;; comp == nil means this is the first render
+    (if (nil? comp)
+      ;; first render is synchronous
+      (do
+        (diff/patch-impl render-queue vnode nil comp-fn props false)
+        (diff/process-post-render-hooks render-queue))
+      (let [comp-data (a/aget comp diff/index-comp-data)]
+        ;; if the patch data are coming from a call to the patch fn
+        (if (= depth -1) 
+          (if-let [dirty-comps (a/aget render-queue diff/index-render-queue-offset)]
+            (do
+              (a/aset dirty-comps 0 props)
+              (a/aset dirty-comps 1 comp-fn)
+              (a/aset dirty-comps 2 comp))
+            (a/aset render-queue diff/index-render-queue-offset
+                    (doto (ArrayList. 3)
+                      (.add props)
+                      (.add comp-fn)
+                      (.add comp))))
+          (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
+            (if-let [dirty-comps (a/aget render-queue (+ depth diff/index-render-queue-offset))]
+              (do (a/add dirty-comps props)
+                  (a/add dirty-comps comp-fn)
+                  (a/add dirty-comps comp))
+              (a/aset render-queue (+ depth diff/index-render-queue-offset)
+                      #js [(.add props) (.add comp-fn) (.add comp)]))))
+        (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag)
+        (a/aset render-queue diff/index-render-queue-pending-flag true)
+        (if synchronous?
+          (binding [diff/*rendered-flag* (js/Object.)]
+            (diff/process-render-queue render-queue)
+            (diff/process-post-render-hooks render-queue)
+            (a/aset render-queue diff/index-render-queue-processing-flag false)
+            (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
+          (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
+            (a/aset render-queue diff/index-render-queue-processing-flag true)
+            (.requestAnimationFrame
+             js/window 
+             (fn []
+               (binding [diff/*rendered-flag* (js/Object.)]
+                 (diff/process-render-queue render-queue)
+                 (diff/process-post-render-hooks render-queue)
+                 (a/aset render-queue diff/index-render-queue-processing-flag false)
+                 (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))))))))))
 
 (defn vtree
   ([]
-   (vtree nil))
-  ([{:keys [async]}]
+   (vtree false))
+  ([synchronous?]
    (->DOMVTree (swap! diff/vtree-ids inc)
                (new-root-vnode)
-               ;; async-fn + post render hooks + internal post render hooks
-               #js [(when async async-fn) #js [] #js []])))
+               ;; render-queue-fn + processing flag + pending flag + dirty-flag
+               ;; + post-render-hooks + render-queue
+               #js [handle-component-update false false (js/Object.) #js [] #js[]]
+               synchronous?)))
 
 (defn set-timeout
   "Execute f after a delay expressed in milliseconds. The first argument of f is the local state reference of the vnode component."
@@ -270,14 +331,3 @@
   (let [component (if (diff/component? vnode) vnode (aget vnode diff/index-component))
         state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
     (.setInterval js/window (fn [] (f state-ref)) millis)))
-
-#_(def dom-context #js {:insert-fn insert-fn-dom
-                        :remove-node-fn remove-node
-                        :create-element-fn create-element
-                        :handle-event-handler-fn handle-event-handler
-                        :make-handler-0 make-handler-fn-0
-                        :make-handler-1 make-handler-fn-1
-                        :make-handler-2 make-handler-fn-2
-                        :make-handler-3 make-handler-fn-3
-                        :async-fn async-fn
-                        :patch-fn patch-impl})

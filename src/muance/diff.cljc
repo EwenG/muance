@@ -943,5 +943,4 @@
 ;; global post-render function (set in the vtree) for dev purpose
 ;; javafx synchronous rendering -> ArrayBlockingQueue of size 1
 ;; post-render-hook as parameters to patch
-;; remove vtree/synchronous-first-render
-;; Add synchronous parameters to vtree
+;; Add a test for the first case of duplicate keys

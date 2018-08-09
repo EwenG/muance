@@ -3,7 +3,7 @@
             [goog.object :as o]
             [muance.core :as m :include-macros true]
             [muance.dom :as dom :include-macros true]
-            [muance.attribute :as a]
+            [muance.attributes :as a]
             [muance.utils-test :as utils]
             [muance.custom-tags :as tag :include-macros true])
   (:require-macros [muance.h :as h]))

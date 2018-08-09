@@ -19,3 +19,5 @@
                                 (make-array String 0))))]
       (.start app-thread)
       @stage-promise)))
+
+;; Some Classes cannot be loaded before the javax platform is initialized. It is initialized by start-app.
