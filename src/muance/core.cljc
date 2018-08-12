@@ -1,7 +1,6 @@
 (ns muance.core
   (:refer-clojure :exclude [remove key])
-  (:require [cljs.repl]
-            [muance.diff :as diff]
+  (:require [muance.diff :as diff]
             [muance.vtree :as vtree]
             [muance.objects :as o]
             [muance.arrays :as a])
@@ -110,33 +109,6 @@
                             ~get-initial-state ~will-receive-props
                             ~did-mount ~did-update ~will-unmount
                             ~remove-hook ~will-update))))))
-
-#?(:clj
-   (defn- call-refresh-roots [namespaces repl-env compiler-env ns-updated?]
-     (loop [namespaces namespaces]
-       (when-let [n (first namespaces)]
-         (if (ns-updated? n)
-           (cljs.repl/-evaluate
-            repl-env "<cljs repl>" 1
-            "muance.core.refresh_roots();")
-           (recur (rest namespaces)))))))
-
-#?(:clj
-   (defn namespaces-starting-with [ns-start-sym]
-     (for [[k v] (:cljs.analyzer/namespaces @cljs.env/*compiler*)
-           :when (.startsWith ^String (str k) (str ns-start-sym))]
-       k)))
-
-#?(:clj
-   (defmacro re-render-on-update [ns-start-sym]
-     (if (cljs-env? &env)
-       (when (-> @cljs.env/*compiler* :options :optimizations (= :none))
-         (let [namespaces (namespaces-starting-with ns-start-sym)]
-           (swap! cljs.env/*compiler* assoc-in
-                  [:replique/ns-watches (str "muance-re-render-" ns-start-sym)]
-                  (partial call-refresh-roots namespaces))))
-       (prn &env))
-     nil))
 
 (defprotocol VTree
   (remove [this]
