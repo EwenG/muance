@@ -203,7 +203,17 @@
       (when-let [comp (aget vnode diff/index-children 0)]
         (diff/insert-vnode-before* fragment comp nil))
       (aset vnode diff/index-node fragment)
-      (o/remove diff/roots (vtree/id vtree)))))
+      (o/remove diff/roots (vtree/id vtree))))
+  (core/refresh [vtree id]
+    (let [vnode (vtree/vnode vtree)
+          the-render-queue (vtree/render-queue vtree)
+          children (a/aget vnode diff/index-children)]
+      (when-let [comp (a/aget children 0)]
+        (diff/patch-impl the-render-queue vnode comp
+                         (diff/get-comp-render-fn comp)
+                         (a/aget comp diff/index-comp-props)
+                         true)
+        (diff/process-post-render-hooks the-render-queue)))))
 
 (extend-protocol context/CreateElement
   nil
@@ -307,14 +317,20 @@
 
 (defn vtree
   ([]
-   (vtree false))
-  ([synchronous?]
-   (->DOMVTree (swap! diff/vtree-ids inc)
-               (new-root-vnode)
-               ;; render-queue-fn + processing flag + pending flag + dirty-flag
-               ;; + post-render-hooks + render-queue
-               #js [handle-component-update false false (js/Object.) #js [] #js[]]
-               synchronous?)))
+   (vtree nil))
+  ([{:keys [synchronous? post-render-hook]}]
+   (let [vt (->DOMVTree (swap! diff/vtree-ids inc)
+                        (new-root-vnode)
+                        ;; render-queue-fn + processing flag + pending flag + dirty-flag
+                        ;; + post-render-hooks + render-queue
+                        #js [handle-component-update false false (js/Object.)
+                             #js [] #js []]
+                        synchronous?)]
+     (when post-render-hook
+       (a/aset (vtree/render-queue vt)
+               diff/index-render-queue-post-render-hooks 0
+               (partial post-render-hook vt)))
+     vt)))
 
 (defn set-timeout
   "Execute f after a delay expressed in milliseconds. The first argument of f is the local state reference of the vnode component."
@@ -331,3 +347,6 @@
   (let [component (if (diff/component? vnode) vnode (aget vnode diff/index-component))
         state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
     (.setInterval js/window (fn [] (f state-ref)) millis)))
+
+(defn refresh-roots []
+  (o/forEach diff/roots diff/refresh-root))

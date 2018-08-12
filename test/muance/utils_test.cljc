@@ -1,8 +1,14 @@
 (ns muance.utils-test
   (:require #?(:cljs [goog.dom :as gdom])
             [muance.core :as m]
+            [muance.print :as mprint]
             #?(:cljs [muance.dom :as dom])
             #?(:clj [muance.javafx :as javafx])))
+
+(defonce v-state (atom nil))
+
+(defn update-v-state [vtree]
+  (reset! v-state (mprint/format-vtree vtree)))
 
 #?(:cljs
    (defn new-root []
@@ -24,13 +30,13 @@
      ([vtree vtree-params]
       (when vtree
         (m/remove vtree))
-      (dom/vtree vtree-params))))
+      (dom/vtree (assoc vtree-params :post-render-hook update-v-state)))))
 
 #?(:clj
    (defn new-vtree
      ([vtree]
-      (new-vtree nil))
+      (new-vtree vtree nil))
      ([vtree vtree-params]
       (when vtree
         (m/remove vtree))
-      (javafx/vtree vtree-params))))
+      (javafx/vtree (assoc vtree-params :post-render-hook update-v-state)))))

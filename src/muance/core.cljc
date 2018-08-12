@@ -129,16 +129,19 @@
 
 #?(:clj
    (defmacro re-render-on-update [ns-start-sym]
-     (when (-> @cljs.env/*compiler* :options :optimizations (= :none))
-       (let [namespaces (namespaces-starting-with ns-start-sym)]
-         (swap! cljs.env/*compiler* assoc-in
-                [:replique/ns-watches (str "muance-re-render-" ns-start-sym)]
-                (partial call-refresh-roots namespaces))))
+     (if (cljs-env? &env)
+       (when (-> @cljs.env/*compiler* :options :optimizations (= :none))
+         (let [namespaces (namespaces-starting-with ns-start-sym)]
+           (swap! cljs.env/*compiler* assoc-in
+                  [:replique/ns-watches (str "muance-re-render-" ns-start-sym)]
+                  (partial call-refresh-roots namespaces))))
+       (prn &env))
      nil))
 
 (defprotocol VTree
   (remove [this]
-    "Detach the root node of a vtree. A detached vtree can still be patched and added back to the DOM."))
+    "Detach the root node of a vtree. A detached vtree can still be patched and added back to the DOM.")
+  (refresh #?(:cljs [this id] :clj [this id it])))
 
 (defprotocol VTreeInsert
   (insert-before [ref-node vtree]
@@ -147,51 +150,58 @@
     "Inserts the root node of a vtree as the last child(ren) of a parent-node."))
 
 (defn refresh-roots []
-  (o/forEach diff/roots diff/refresh-root))
+  (o/forEach diff/roots refresh))
 
 (defn component-name
   "Return the fully qualified name of the node's component, as a string."
-  [vnode]
-  (diff/component-name vnode))
+  []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/component-name was called outside of render loop"))
+  (diff/component-name diff/*vnode*))
 
 (defn key
   "Returns the :muance.core/key attribute of vnode, as a string."
-  [vnode]
-  (assert vnode "muance.core/key expects a vnode.")
-  (a/aget vnode diff/index-key))
+  []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/key was called outside of render loop"))
+  (a/aget diff/*vnode* diff/index-key))
 
 ;; Useful to systematically execute an action on the DOM after it has been updated
 (defn post-render
-  "Registers a function to be executed after the next Muance render pass. Takes a vnode or vtree,
+  "Registers a function to be executed after the next Muance render pass. Takes a vnode,
   the function to be executed and up to three optional parameters to be passed to the 
   function f."
-  ([vnode f]
-   (assert vnode "muance.core/post-render expects a vnode.")
-   (-> (diff/get-render-queue vnode)
+  ([f]
+   (assert (not (nil? diff/*vnode*))
+           (str "muance.core/post-render was called outside of render loop"))
+   (-> (diff/get-render-queue diff/*vnode*)
        (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f]
                  :clj (doto (ArrayList.)
                         (.add f))))))
-  ([vnode f arg1]
-   (assert vnode "muance.core/post-render expects a vnode.")
-   (-> (diff/get-render-queue vnode)
+  ([f arg1]
+   (assert (not (nil? diff/*vnode*))
+           (str "muance.core/post-render was called outside of render loop"))
+   (-> (diff/get-render-queue diff/*vnode*)
        (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f arg1]
                  :clj (doto (ArrayList.)
                         (.add f)
                         (.add arg1))))))
-  ([vnode f arg1 arg2]
-   (assert vnode "muance.core/post-render expects a vnode.")
-   (-> (diff/get-render-queue vnode)
+  ([f arg1 arg2]
+   (assert (not (nil? diff/*vnode*))
+           (str "muance.core/post-render was called outside of render loop"))
+   (-> (diff/get-render-queue diff/*vnode*)
        (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f arg1 arg2]
                  :clj (doto (ArrayList.)
                         (.add f)
                         (.add arg1)
                         (.add arg2))))))
-  ([vnode f arg1 arg2 arg3]
-   (assert vnode "muance.core/post-render expects a vnode.")
-   (-> (diff/get-render-queue vnode)
+  ([f arg1 arg2 arg3]
+   (assert (not (nil? diff/*vnode*))
+           (str "muance.core/post-render was called outside of render loop"))
+   (-> (diff/get-render-queue diff/*vnode*)
        (a/aget diff/index-render-queue-post-render-hooks)
        (a/add #?(:cljs #js [f arg1 arg2 arg3]
                  :clj (doto (ArrayList.)
@@ -202,16 +212,18 @@
 
 (defn dom-nodes
   "Return a vector of all the real nodes associated with vnode."
-  [vnode]
-  (assert vnode "muance.core/dom-nodes expects a vnode.")
-  (diff/dom-nodes vnode))
+  []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/dom-nodes was called outside of render loop"))
+  (diff/dom-nodes diff/*vnode*))
 
 (defn dom-node
   "Return the real nodes associated with vnode. Returns the first children of vnode if vnode is
   a component and is associated with multiple real nodes."
-  [vnode]
-  (assert vnode "muance.core/dom-node expects a vnode.")
-  (diff/dom-node vnode))
+  []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/dom-node was called outside of render loop"))
+  (diff/dom-node diff/*vnode*))
 
 ;;;;
 
@@ -223,14 +235,15 @@
    (let [render-queue (vtree/render-queue vtree)
          render-queue-fn (a/aget render-queue diff/index-render-queue-fn)]
      (render-queue-fn #?(:cljs #js [(vtree/render-queue vtree) props component
-                                    (vtree/vnode vtree) -1 false]
-                         :clj (doto (ArrayList. 6)
+                                    (vtree/vnode vtree) -1 false false]
+                         :clj (doto (ArrayList. 7)
                                 (.add (vtree/render-queue vtree))
                                 (.add props)
                                 (.add component)
                                 (.add (vtree/vnode vtree))
                                 (.add -1)
-                                (.add (vtree/synchronous? vtree))))))))
+                                (.add (vtree/synchronous? vtree))
+                                (.add false)))))))
 
 (defn state []
   (assert (not (nil? diff/*vnode*)) (str "muance.core/state was called outside of render loop"))
@@ -241,3 +254,4 @@
   diff/*vnode*)
 
 
+;; Most public API are required to be called in the render-loop in order to be called on the rendering thread and to avoid sharing mutable data accross threads

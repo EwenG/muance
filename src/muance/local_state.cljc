@@ -54,7 +54,7 @@
      (context/-remove-muance-watcher [this]
        (set! muance-watcher nil))
      (context/-muance-watcher [this]
-       muance-wtacher)))
+       muance-watcher)))
 
 #?(:clj
    (declare notify-watches))

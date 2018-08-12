@@ -41,7 +41,7 @@
         (string? form) `(~'muance.dom/text-node ~form)
         :else form))
 
-;; Not used anymore. We use a simplified, less precize logic now
+;; Not used anymore. We use a simplified, less precise logic now
 #_(defn- local-dep [{name :name fn-var :fn-var
                    local :local init :init
                    op :op tag :tag dynamic :dynamic

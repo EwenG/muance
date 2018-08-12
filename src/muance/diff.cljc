@@ -155,7 +155,6 @@
 (defn dom-nodes
   "Return a vector of all the DOM nodes associated with vnode."
   [vnode]
-  (assert vnode "muance.core/dom-nodes expects a vnode.")
   (if (component? vnode)
     (into [] (dom-nodes* #?(:cljs #js [] :clj (ArrayList.)) vnode))
     [(a/aget vnode index-node)]))
@@ -181,8 +180,16 @@
           render-queue (a/aget stateful-data 2)
           render-queue-fn (a/aget render-queue index-render-queue-fn)
           component-depth (a/aget vnode index-comp-data index-comp-data-depth)]
-      (render-queue-fn render-queue (a/aget vnode index-comp-props) comp-fn vnode
-                       component-depth false))))
+      (render-queue-fn #?(:cljs #js [render-queue (a/aget vnode index-comp-props) comp-fn vnode
+                                     component-depth false false]
+                          :clj (doto (ArrayList. 7)
+                                 (.add render-queue)
+                                 (.add (a/aget vnode index-comp-props))
+                                 (.add comp-fn)
+                                 (.add vnode)
+                                 (.add component-depth)
+                                 (.add false)
+                                 (.add false)))))))
 
 (defn parent-node [parent]
   (if (component? parent)
@@ -277,6 +284,7 @@
 (defn insert-vnode-before* [parent-node vnode ref-node]
   (if (component? vnode)
     (when-let [children (a/aget vnode index-children)]
+      
       (let [l (a/length children)]
         (loop [i 0]
           (when (< i l)
@@ -847,18 +855,25 @@
     (call-did-mount-hooks (dec *components-queue-count*))))
 
 (defn call-post-render [post-render]
-  (let [l (a/length post-render)]
-    (cond
-      (= l 1) ((a/aget post-render 0))
-      (= l 2) ((a/aget post-render 0) (a/aget post-render 1))
-      (= l 3) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2))
-      (= l 4) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2) (a/aget post-render 3)))))
+  (when post-render
+    (when (not (fn? post-render))
+      (let [l (a/length post-render)]
+        (cond
+          (= l 1) ((a/aget post-render 0))
+          (= l 2) ((a/aget post-render 0) (a/aget post-render 1))
+          (= l 3) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2))
+          (= l 4) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2) (a/aget post-render 3)))))))
 
 (defn process-post-render-hooks [render-queue]
-  (let [post-renders (a/aget render-queue index-render-queue-post-render-hooks)]
+  (let [post-renders (a/aget render-queue index-render-queue-post-render-hooks)
+        global-post-render-hook (a/aget post-renders 0)]
     (a/aset render-queue index-render-queue-post-render-hooks
-            #?(:cljs #js [] :clj (ArrayList.)))
-    (a/forEach post-renders call-post-render)))
+            #?(:cljs #js [global-post-render-hook]
+               :clj (doto (ArrayList.)
+                      (.add global-post-render-hook))))
+    (a/aset post-renders 0 nil)
+    (a/forEach post-renders call-post-render)
+    (when global-post-render-hook (global-post-render-hook))))
 
 (defn process-render-queue [render-queue]
   (let [l (a/length render-queue)]
@@ -876,8 +891,7 @@
                               vnode
                               comp-fn props false))
                 (recur)))))
-        (recur (inc i)))))
-  (process-post-render-hooks render-queue))
+        (recur (inc i))))))
 
 (defn get-render-queue [vnode]
   (cond (satisfies? vtree/VTree vnode)
@@ -906,17 +920,6 @@
       (.-component-data)
       (a/aget 1)))
 
-(defn refresh-root #?(:cljs [vtree id] :clj [vtree id it])
-  (let [vnode (vtree/vnode vtree)
-        the-render-queue (vtree/render-queue vtree)
-        children (a/aget vnode index-children)]
-    (when-let [comp (a/aget children 0)]
-      (patch-impl the-render-queue vnode comp
-                  (get-comp-render-fn comp)
-                  (a/aget comp index-comp-props)
-                  true)
-      (process-post-render-hooks the-render-queue))))
-
 ;; node identity is the same implies that the svg-namespace value did not change
 
 ;; index-in-parent is set when moving node (including in splice) to keep things consistent
@@ -933,14 +936,14 @@
 
 ;; comp-hooks stores the component-id of its target component. When redefining a component, its hooks are lost
 
-;; Synchronous rendering is mainly useful for testing. Synchronous rendering cannot be a parameter to patch since local state updates would not be impacted
+;; synchronous rendering is mainly useful for testing. Synchronous rendering cannot be a parameter to patch since local state updates would not be impacted
+
+;; global-post-render-hook cannot be a parameter to patch since local state updates would not be impacted
 
 ;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
-;; component-hooks -> atom (thread safety)
-;; ensure that core.cljc API is called during the render loop (thread safety)
-;; global post-render function (set in the vtree) for dev purpose
-;; javafx synchronous rendering -> ArrayBlockingQueue of size 1
-;; post-render-hook as parameters to patch
+;; comp-hooks -> atom (thread safety)
 ;; Add a test for the first case of duplicate keys
+;; refresh-root with render-queue-logic
+;; cljs dependency conditional load (dynaload)

@@ -388,7 +388,8 @@
          (.setValue child# (a/aget vnode# diff/index-node))))
      (context/remove-node [parent-node# node#]
        (let [child# (. parent-node# ~children-getter)]
-         (.setValue child# nil)))))
+         (when (identical? (.getValue child#) node#)
+           (.setValue child# nil))))))
 
 (defn emit-defmacro [name tag max-children]
   `(defmacro ~(vary-meta name assoc
@@ -453,7 +454,8 @@
       (.setRoot parent-node (a/aget vnode diff/index-node))))
   (context/remove-node [parent-node node]
     ;; Root cannot be nil
-    (.setRoot parent-node (Group.))))
+    (when (identical? (.getRoot parent-node) node)
+      (.setRoot parent-node (Group.)))))
 
 (extend-protocol context/CreateElement
   nil
@@ -483,7 +485,18 @@
       (when-let [comp (a/aget vnode diff/index-children 0)]
         (diff/insert-vnode-before* fragment comp nil))
       (a/aset vnode diff/index-node fragment)
-      (o/remove diff/roots (vtree/id vtree)))))
+      (o/remove diff/roots (vtree/id vtree))))
+  (m/refresh [vtree id it]
+    (run-later
+     (let [vnode (vtree/vnode vtree)
+           the-render-queue (vtree/render-queue vtree)
+           children (a/aget vnode diff/index-children)]
+       (when-let [comp (a/aget children 0)]
+         (diff/patch-impl the-render-queue vnode comp
+                          (diff/get-comp-render-fn comp)
+                          (a/aget comp diff/index-comp-props)
+                          true)
+         (diff/process-post-render-hooks the-render-queue))))))
 
 (defn- new-root-vnode []
   (doto (ArrayList.)
@@ -586,14 +599,14 @@
 ;; Returns a frozen render queue and resets the origin render-queue as a side effect
 (defn- make-frozen-render-queue [render-queue]
   (let [l (a/length render-queue)
-        frozen-queue (ArrayList. l)
-        it (.iterator render-queue)
+        frozen-queue (ArrayList. ^int l)
+        it (.iterator ^ArrayList render-queue)
         components-length (a/length (a/aget render-queue diff/index-render-queue-offset))]
-    (loop [i 0]
+    (loop [i diff/index-render-queue-offset]
       (when (< i l)
         (a/aset frozen-queue i (a/aget render-queue i))
         (recur (inc i))))
-    (a/aset render-queue diff/index-render-queue-offset (ArrayList. components-length))
+    (a/aset render-queue diff/index-render-queue-offset (ArrayList. ^int components-length))
     frozen-queue))
 
 (defn- start-animation-timer [render-queue]
@@ -655,12 +668,13 @@
             (run-later
              (binding [diff/*rendered-flag* (Object.)]
                (diff/process-render-queue frozen-render-queue)
-               (diff/process-post-render-hooks frozen-render-queue))))
+               ;; process-post-render-hooks with the original queue, not the frozen queue !
+               (diff/process-post-render-hooks render-queue))))
           (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
             (a/aset render-queue diff/index-render-queue-processing-flag true)
             (start-animation-timer render-queue)))))))
 
-(defn- handle-animation-timer-request [in]
+(defn- handle-animation-timer-request [^muance.animation_timer.FrozenRenderQueue in]
   (let [render-queue (.-origin-render-queue in)
         render-queue-out (.-render-queue-out in)
         pending-flag (a/aget render-queue diff/index-render-queue-pending-flag)]
@@ -668,49 +682,51 @@
       (let [frozen-render-queue (make-frozen-render-queue render-queue)]
         (a/aset render-queue diff/index-render-queue-pending-flag false)
         (a/aset render-queue diff/index-render-queue-dirty-flag (Object.))
-        (.put render-queue-out frozen-render-queue))
+        (.put ^SynchronousQueue render-queue-out frozen-render-queue))
       (do
         (a/aset render-queue diff/index-render-queue-processing-flag false)
-        (.put render-queue-out false)))))
+        (.put ^SynchronousQueue render-queue-out false)))))
 
 (defn- render-queue-worker-impl []
-  (try
-    (let [in (.take render-queue-in)]
-      (if (instance? muance.animation_timer.FrozenRenderQueue in)
-        (handle-animation-timer-request in)
-        (handle-component-update in)))
-    (catch Exception e
-      (prn e))))
+  (let [in (.take ^SynchronousQueue render-queue-in)]
+    (if (instance? muance.animation_timer.FrozenRenderQueue in)
+      (handle-animation-timer-request in)
+      (handle-component-update in))))
 
 (defn- render-queue-fn [in]
-  (.put render-queue-in in))
+  (.put ^SynchronousQueue render-queue-in in))
 
 (defn- render-queue-worker-loop []
   (loop []
     (render-queue-worker-impl)
     (recur)))
 
-(defonce render-queue-worker (doto (Thread. render-queue-worker-loop
+(defonce render-queue-worker (doto (Thread. ^Runnable render-queue-worker-loop
                                             "muance-render-queue-worker")
                                (.setDaemon true)
                                (.start)))
 
 (defn vtree
   ([]
-   (vtree false))
-  ([synchronous?]
-   (->JavafxVTree (swap! diff/vtree-ids inc)
-                  (new-root-vnode)
-                  ;; render-queue-fn + processing flag + pending flag + dirty-flag
-                  ;; + post-render-hooks + render-queue
-                  (doto (ArrayList. 6)
-                    (.add render-queue-fn)
-                    (.add false)
-                    (.add false)
-                    (.add (Object.))
-                    (.add (ArrayList.))
-                    (.add (ArrayList.)))
-                  synchronous?)))
+   (vtree nil))
+  ([{:keys [synchronous? post-render-hook]}]
+   (let [vt (->JavafxVTree (swap! diff/vtree-ids inc)
+                          (new-root-vnode)
+                          ;; render-queue-fn + processing flag + pending flag + dirty-flag
+                          ;; + post-render-hooks + render-queue
+                          (doto (ArrayList. 6)
+                            (.add render-queue-fn)
+                            (.add false)
+                            (.add false)
+                            (.add (Object.))
+                            (.add (ArrayList.))
+                            (.add (ArrayList.)))
+                          synchronous?)]
+     (when post-render-hook
+       (a/aset
+        (a/aget (vtree/render-queue vt) diff/index-render-queue-post-render-hooks)
+        0 (partial post-render-hook vt)))
+     vt)))
 
 
 (comment
