@@ -348,5 +348,3 @@
         state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
     (.setInterval js/window (fn [] (f state-ref)) millis)))
 
-(defn refresh-roots []
-  (o/forEach diff/roots diff/refresh-root))
