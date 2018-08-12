@@ -908,7 +908,7 @@
                   (a/aget 2))))
 
 ;; store hooks for components
-(defonce comp-hooks #?(:cljs (js-obj) :clj (HashMap.)))
+(defonce comp-hooks #?(:cljs (js-obj) :clj (java.util.concurrent.ConcurrentHashMap.)))
 
 (defonce vtree-ids (atom 0))
 ;; Roots is only set on the rendering thread
@@ -943,7 +943,4 @@
 ;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
-;; comp-hooks -> atom (thread safety)
 ;; Add a test for the first case of duplicate keys
-;; refresh-root with render-queue-logic
-;; cljs dependency conditional load (dynaload)
