@@ -4,7 +4,8 @@
             [muance.local-state :as ls]
             [muance.objects :as o]
             [muance.vtree :as vtree]
-            [muance.context :as context])
+            [muance.context :as context]
+            #?(:clj [clojure.tools.logging :as log]))
   #?(:clj (:import [java.util ArrayList HashMap])))
 
 (def ^:const index-typeid 0)
@@ -435,8 +436,8 @@
                            (str "Duplicate key: " key " in component "
                                 (component-name prev)))
              :clj (binding [*out* *err*]
-                    (prn (str "Duplicate key: " key " in component "
-                              (component-name prev))))))
+                    (log/warn (str "Duplicate key: " key " in component "
+                                   (component-name prev))))))
         (when key
           (a/aset prev index-key-moved *moved-flag*))
         (set! *vnode* prev)
@@ -469,8 +470,8 @@
                                      (str "Duplicate key: " key " in component "
                                           (component-name moved-vnode)))
                        :clj (binding [*out* *err*]
-                              (prn (str "Duplicate key: " key " in component "
-                                        (component-name moved-vnode)))))
+                              (log/warn (str "Duplicate key: " key " in component "
+                                             (component-name moved-vnode)))))
                     ;; unset the key of the already moved node, in order to avoid conflicts
                     ;; (of keys) with the newly created vnode
                     (a/aset moved-vnode index-key nil))
@@ -480,8 +481,8 @@
                                 js/console
                                 (str "Nodes with same key and different typeids. key: " key))
                          :clj (binding [*out* *err*]
-                                (prn (str "Nodes with same key and different typeids. key: "
-                                          key))))
+                                (log/warn (str "Nodes with same key and different typeids. key: "
+                                               key))))
                     (when (identical? (a/aget moved-vnode index-key-moved) moving-flag)
                       (a/aset *vnode* index-keymap-invalid
                             (dec (a/aget *vnode* index-keymap-invalid)))
@@ -940,7 +941,10 @@
 
 ;; global-post-render-hook cannot be a parameter to patch since local state updates would not be impacted
 
+;; comp-fn is a var in order for refresh-roots to work even when redefining the root component
+
 ;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
 ;; Add a test for the first case of duplicate keys
+;; javafx synchronous rendering
