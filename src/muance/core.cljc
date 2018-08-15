@@ -70,16 +70,25 @@
              `([]
                (~name nil)))
           (~(if params-with-props [key-sym params-with-props] [key-sym])
-           (cljs.core/let [parent-component# muance.diff/*component*
+           (~(if (cljs-env? &env)
+               'cljs.core/let
+               'clojure.core/let)
+            [parent-component# muance.diff/*component*
                            hooks# (o/get muance.diff/comp-hooks
                                          ~(str env-ns "/" name))]
              (diff/open-comp ~(str env-ns "/" name)
                              ~typeid ~(boolean params-with-props)
                              ~(when params-with-props props-sym)
-                             ~name ~key-sym hooks#)
-             (cljs.core/when-not muance.diff/*skip*
-               ~@body)
-             (diff/close-comp parent-component# hooks#)))))))
+                             (var ~name) ~key-sym hooks#)
+            (~(if (cljs-env? &env)
+                'cljs.core/when-not
+                'clojure.core/when-not) muance.diff/*skip*
+             ~@body)
+            (diff/close-comp parent-component# hooks#)))))))
+
+#?(:clj
+   (defn var-meta [env sym]
+     ))
 
 #?(:clj
    (defmacro hooks
@@ -87,28 +96,53 @@
   lifecycle hooks."
      [component hooks-map]
      (let [not-a-comp-msg "muance.core/hooks first parameter must be a component"
-           _ (assert (symbol? component) not-a-comp-msg)
-           resolved (do (require 'muance.dom)
-                        ((resolve 'muance.dom/cljs-resolve) &env component))
-           comp-ns (and resolved (symbol (namespace resolved)))
-           comp-sym (and resolved (symbol (name resolved)))
-           _ (assert (and comp-ns comp-sym) not-a-comp-msg)
-           var-map (get-in @cljs.env/*compiler* [:cljs.analyzer/namespaces comp-ns :defs comp-sym])
-           comp-id (get-in var-map [:meta ::component])]
-       (assert comp-id not-a-comp-msg)
-       (assert (map? hooks-map))
-       (let [{will-update :will-update will-unmount :will-unmount
-              remove-hook :remove-hook
-              did-mount :did-mount did-update :did-update
-              will-receive-props :will-receive-props
-              get-initial-state :get-initial-state :as attrs} hooks-map]
-         `(o/set
-           muance.diff/comp-hooks
-           ~(str comp-ns "/" comp-sym)
-           (cljs.core/array ~comp-id
-                            ~get-initial-state ~will-receive-props
-                            ~did-mount ~did-update ~will-unmount
-                            ~remove-hook ~will-update))))))
+           _ (assert (symbol? component) not-a-comp-msg)]
+       (if (cljs-env? &env)
+         (do
+           (require 'muance.dom)
+           (require 'cljs.env)
+           (let [resolved ((resolve 'muance.dom/cljs-resolve) &env component)
+                 comp-ns (and resolved (symbol (namespace resolved)))
+                 comp-sym (and resolved (symbol (name resolved)))
+                 _ (assert (and comp-ns comp-sym) not-a-comp-msg)
+                 var-map (get-in @(resolve 'cljs.env/*compiler*)
+                                 [:cljs.analyzer/namespaces comp-ns :defs comp-sym])
+                 comp-id (get-in var-map [:meta ::component])]
+             (assert comp-id not-a-comp-msg)
+             (assert (map? hooks-map))
+             (let [{will-update :will-update will-unmount :will-unmount
+                    remove-hook :remove-hook
+                    did-mount :did-mount did-update :did-update
+                    will-receive-props :will-receive-props
+                    get-initial-state :get-initial-state :as attrs} hooks-map]
+               `(o/set
+                 muance.diff/comp-hooks
+                 ~(str comp-ns "/" comp-sym)
+                 (cljs.core/array ~comp-id
+                                  ~get-initial-state ~will-receive-props
+                                  ~did-mount ~did-update ~will-unmount
+                                  ~remove-hook ~will-update)))))
+         (let [resolved (resolve component)
+               comp-ns (and resolved (ns-name (.-ns resolved)))
+               comp-sym (and resolved (.-sym resolved))
+               _ (assert (and comp-ns comp-sym) not-a-comp-msg)
+               comp-id (get (meta resolved) ::component)]
+           (assert comp-id not-a-comp-msg)
+           (assert (map? hooks-map))
+           (let [{will-update :will-update will-unmount :will-unmount
+                  remove-hook :remove-hook
+                  did-mount :did-mount did-update :did-update
+                  will-receive-props :will-receive-props
+                  get-initial-state :get-initial-state :as attrs} hooks-map]
+             `(o/set
+               muance.diff/comp-hooks
+               ~(str comp-ns "/" comp-sym)
+               (doto (java.util.ArrayList.)
+                 (.add ~comp-id)
+                 (.add ~get-initial-state)
+                 (.add ~will-receive-props)
+                 (.add ~did-mount) (.add ~did-update) (.add ~will-unmount)
+                 (.add ~remove-hook) (.add ~will-update)))))))))
 
 (defprotocol VTree
   (remove [this]
