@@ -7,7 +7,9 @@
             [muance.vtree :as vtree]
             [muance.context :as context]
             [muance.attributes :as attributes]
-            [muance.animation-timer :as animation-timer])
+            [muance.animation-timer :as animation-timer]
+            [clojure.tools.logging :as log]
+            #_[muance.list-cell :as list-cell])
   (:import [java.util ArrayList Collections]
            [javafx.collections ObservableList]
            [javafx.beans.property ObjectProperty]
@@ -16,7 +18,8 @@
            [javafx.scene.control TreeItem]
            [javafx.stage Stage]
            [javafx.beans.property ObjectProperty]
-           [java.util.concurrent SynchronousQueue]))
+           [java.util.concurrent SynchronousQueue]
+           [muance.javafx AnimationTimer FrozenRenderQueue ListCell]))
 
 (defonce stage (init/start-app))
 
@@ -101,6 +104,27 @@
 (defn- as-on-property-setter [tag property]
   (let [property-method-name (property-with-prefix "setOn" property)]
     (property-method tag property-method-name 1)))
+
+(defn- format-style-entry [[k v]]
+  (if (string? v)
+    [(str (name k) ":") (str v) ";"]
+    [(str (name k) ":") `(str ~v) ";"]))
+
+(defn- style-map->arr [style-map]
+  (mapcat format-style-entry style-map))
+
+(defn- style-arr->calls [style-arr]
+  `(doto (java.util.ArrayList.) ~@(for [s style-arr]
+                                    `(.add ~s))))
+
+(comment
+  (style-map->arr {:display "block"
+                   :height 'x
+                   :width "33px"})
+  (style-map->arr {})
+
+  (style-map->arr {:display nil})
+  )
 
 (defn- on-0 [tag key f]
   `(let [f# ~f]
@@ -308,6 +332,66 @@
        (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag})
           ~(symbol key) val#))))
 
+(defn set-class [c]
+  (let [style-class (.getStyleClass ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node))]
+    (.clear style-class)
+    (.add style-class c)))
+
+(defn set-classes [classes]
+  (let [style-class (.getStyleClass ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node))]
+    (.clear style-class)
+    (doseq [c classes]
+      (.add style-class c))))
+
+(defn- style-class [c]
+  `(let [c# ~c]
+     (when (diff/compare-attrs c#)
+       (if (coll? c#)
+         (set-classes c#)
+         (set-class c#))
+       (diff/set-attr c#))
+     (diff/inc-attrs 1)))
+
+(defn- style-class-static [c]
+  `(let [c# ~c]
+     (when (and (> diff/*new-node* 0) (not (nil? c#)))
+       (set-class c#))))
+
+(defn- style-classes-static [classes]
+  `(let [classes# ~classes]
+     (when (and (> diff/*new-node* 0) (not (nil? classes#)))
+       (set-classes classes#))))
+
+(defn style-remove-nils! [style-arr i l]
+  (when (< i l)
+    (let [v (a/aget style-arr (inc i))]
+      (when (= (.trim ^String v) "")
+        (a/aset style-arr i "")
+        (a/aset style-arr (inc i) "")
+        (a/aset style-arr (+ i 2) "")))
+    (recur style-arr (+ i 3) l)))
+
+(defn join-strings [a]
+  (let [sb (StringBuffer.)]
+    (a/forEach a #(.append sb %))
+    (str sb)))
+
+(defn- style [key val]
+  `(let [val# ~val]
+     (style-remove-nils! val# 0 (a/length val#))
+     (let [val# (join-strings val#)]
+       (when (diff/compare-attrs val#)
+         (. (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)
+         (diff/set-attr val#)))
+     (diff/inc-attrs 1)))
+
+(defn- style-static [key val]
+  `(let [val# ~val]
+     (style-remove-nils! val# 0 (a/length val#))
+     (let [val# (join-strings val#)]
+       (when (and (> diff/*new-node* 0) (not (nil? val#)))
+         (. (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)))))
+
 (defn- input-value [tag val]
   (let [node-sym (with-meta (gensym "node") {:tag tag})]
     `(let [val# (nil-or-string ~val)
@@ -323,6 +407,19 @@
             (cond
               (= k ::m/key) calls
               (= k ::m/hooks) calls
+              (= k :styleClass) (cond
+                                  (and (vector? v) (every? #(static? env %) v))
+                                  (conj calls (style-classes-static v))
+                                  (static? env v)
+                                  (conj calls (style-class-static v))
+                                  :else (conj calls (style-class v)))
+              (= k :style) (let [style-arr (style-map->arr v)
+                                 style-call (style-arr->calls style-arr)
+                                 property-name (:name (as-property-setter tag :style))]
+                             (assert property-name (str "style is not a property of " tag))
+                             (if (every? (partial static? env) style-arr)
+                               (conj calls (style-static property-name style-call))
+                               (conj calls (style property-name style-call))))
               (= k ::m/on) (into calls (on-calls env tag v))
               (= k ::m/listen) (into calls (listen-calls env tag v))
               (and (isa? (Class/forName (str tag))
@@ -391,6 +488,25 @@
          (when (identical? (.getValue child#) node#)
            (.setValue child# nil))))))
 
+(defn parent-insert-before [^ObservableList children vnode ref-node]
+  (let [node (a/aget vnode diff/index-node)]
+    ;; javafx forbids duplicate children
+    (.remove children node)
+    (if (nil? ref-node)
+      (.add children node)
+      (let [index (.indexOf children ref-node)]
+        (if (= index -1)
+          (.add children node)
+          (.add children index node))))))
+
+(defn emit-context-children-property [tag children-getter]
+  `(extend-type ~tag
+     context/Context
+     (context/insert-before [parent-node# vnode# ref-node#]
+       (parent-insert-before (. parent-node# ~children-getter) vnode# ref-node#))
+     (context/remove-node [parent-node# node#]
+       (.remove (. parent-node# ~children-getter) node#))))
+
 (defn emit-defmacro [name tag max-children]
   `(defmacro ~(vary-meta name assoc
                          ::tag `(quote ~tag)
@@ -417,18 +533,9 @@
     `(do
        ~(when (and max-children (= return-type ObjectProperty))
           (emit-context-child-property tag children-getter))
+       ~(when (and children-getter (= return-type ObservableList))
+          (emit-context-children-property tag children-getter))
        ~(emit-defmacro name tag max-children))))
-
-(defn parent-insert-before [^ObservableList children vnode ref-node]
-  (let [node (a/aget vnode diff/index-node)]
-    ;; javafx forbids duplicate children
-    (.remove children node)
-    (if (nil? ref-node)
-      (.add children node)
-      (let [index (.indexOf children ref-node)]
-        (if (= index -1)
-          (.add children node)
-          (.add children index node))))))
 
 ;; Cannot extend parent directly wihtout avoid reflection warnings because the .getChildren method
 ;; is protected
@@ -594,6 +701,13 @@
     (.removeListener property ^javafx.beans.value.ChangeListener diff/*handlers-prev*))
   (.addListener property listener))
 
+#_(defn comp->list-cell-factory [c]
+  (reify javafx.util.Callback
+    (call [cb p]
+      (let [vt (vtree)]
+        (reify javafx.scene.control.ListCell
+          (updateItem [list-cell item empty]))))))
+
 (defonce ^:private render-queue-in (SynchronousQueue. true))
 
 ;; Returns a frozen render queue and resets the origin render-queue as a side effect
@@ -610,8 +724,10 @@
     frozen-queue))
 
 (defn- start-animation-timer [render-queue]
-  (.start (muance.javafx.AnimationTimer.
-           (animation-timer/->FrozenRenderQueue render-queue render-queue-in (SynchronousQueue.)))))
+  (.start (AnimationTimer.
+           animation-timer/animation-timer-handle
+           (FrozenRenderQueue.
+            render-queue render-queue-in (SynchronousQueue.)))))
 
 (defn- handle-component-update [in]
   (let [render-queue (a/aget in 0)
@@ -634,9 +750,12 @@
       ;; first render is synchronous
       (let [p (promise)]
         (run-later
-         (diff/patch-impl render-queue vnode nil comp-fn props false)
-         (diff/process-post-render-hooks render-queue)
-         (deliver p true))
+         (try
+           (diff/patch-impl render-queue vnode nil comp-fn props false)
+           (diff/process-post-render-hooks render-queue)
+           (catch Exception e
+             (log/error e))
+           (finally (deliver p true))))
         @p)
       (let [comp-data (a/aget comp diff/index-comp-data)]
         ;; if the patch data are coming from a call to the patch fn
@@ -674,9 +793,9 @@
             (a/aset render-queue diff/index-render-queue-processing-flag true)
             (start-animation-timer render-queue)))))))
 
-(defn- handle-animation-timer-request [^muance.animation_timer.FrozenRenderQueue in]
-  (let [render-queue (.-origin-render-queue in)
-        render-queue-out (.-render-queue-out in)
+(defn- handle-animation-timer-request [^FrozenRenderQueue in]
+  (let [render-queue (.getOriginRendeQueue in)
+        render-queue-out (.getRenderQueueOut in)
         pending-flag (a/aget render-queue diff/index-render-queue-pending-flag)]
     (if pending-flag
       (let [frozen-render-queue (make-frozen-render-queue render-queue)]
@@ -689,7 +808,7 @@
 
 (defn- render-queue-worker-impl []
   (let [in (.take ^SynchronousQueue render-queue-in)]
-    (if (instance? muance.animation_timer.FrozenRenderQueue in)
+    (if (instance? FrozenRenderQueue in)
       (handle-animation-timer-request in)
       (handle-component-update in))))
 
@@ -705,6 +824,11 @@
                                             "muance-render-queue-worker")
                                (.setDaemon true)
                                (.start)))
+
+(defn- set-post-render-hook [vt post-render-hook]
+  (a/aset
+   (a/aget (vtree/render-queue vt) diff/index-render-queue-post-render-hooks)
+   0 (partial post-render-hook vt)))
 
 (defn vtree
   ([]
@@ -723,14 +847,29 @@
                             (.add (ArrayList.)))
                           synchronous?)]
      (when post-render-hook
-       (a/aset
-        (a/aget (vtree/render-queue vt) diff/index-render-queue-post-render-hooks)
-        0 (partial post-render-hook vt)))
+       (set-post-render-hook vt post-render-hook))
      vt)))
 
-
-(comment
-  (in-ns 'user)
-  (binding [*compile-path* "target/classes"]
-    (compile 'muance.javafx))
-  )
+#_(defn list-cell-factory [comp]
+  (reify javafx.util.Callback
+    (call [this p]
+      (let [state (ArrayList. 2)
+            list-cell (ListCell. list-cell/list-cell-updateItem state)
+            vt (vtree)]
+        (a/aset state list-cell/index-vtree vt)
+        (a/aset state list-cell/index-component comp)
+        (set-post-render-hook
+         vt
+         (fn [_]
+           (prn (a/aget
+                         (vtree/vnode vt)
+                         diff/index-children
+                         0
+                         diff/index-node))
+           #_(.setGraphic list-cell
+                        (a/aget
+                         (vtree/vnode vt)
+                         diff/index-children
+                         0
+                         diff/index-node))))
+        list-cell))))
