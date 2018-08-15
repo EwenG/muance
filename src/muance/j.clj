@@ -7,7 +7,16 @@
                      :children-getter 'contentProperty}
                     {:name 'group :tag 'javafx.scene.Group}
                     {:name 'button :tag 'javafx.scene.control.Button}
-                    {:name 'textField :tag 'javafx.scene.control.TextField}})
+                    {:name 'text-field :tag 'javafx.scene.control.TextField}
+                    {:name 'split-pane :tag 'javafx.scene.control.SplitPane
+                     :children-getter 'getItems}
+                    {:name 'tree-view :tag 'javafx.scene.control.TreeView
+                     :children-getter 'rootProperty}
+                    {:name 'tree-item :tag 'javafx.scene.control.TreeItem
+                     :children-getter 'getChildren}
+                    {:name 'combo-box :tag 'javafx.scene.control.ComboBox
+                     :children-getter 'getItems}
+                    {:name 'list-view :tag 'javafx.scene.control.ListView}})
 
 (def element-macros javafx-nodes)
 
