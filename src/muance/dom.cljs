@@ -321,10 +321,10 @@
   ([{:keys [synchronous? post-render-hook]}]
    (let [vt (->DOMVTree (swap! diff/vtree-ids inc)
                         (new-root-vnode)
-                        ;; render-queue-fn + processing flag + pending flag + dirty-flag
-                        ;; + post-render-hooks + render-queue
+                        ;; render-queue-fn + processing flag + pending flag + dirty-flag +
+                        ;; first-render-promise + post-render-hooks + render-queue
                         #js [handle-component-update false false (js/Object.)
-                             #js [] #js []]
+                             nil #js [] #js []]
                         synchronous?)]
      (when post-render-hook
        (a/aset (vtree/render-queue vt)

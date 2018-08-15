@@ -59,8 +59,9 @@
 (def ^:const index-render-queue-processing-flag 1)
 (def ^:const index-render-queue-pending-flag 2)
 (def ^:const index-render-queue-dirty-flag 3)
-(def ^:const index-render-queue-post-render-hooks 4)
-(def ^:const index-render-queue-offset 5)
+(def ^:const index-render-queue-first-render-promise 4)
+(def ^:const index-render-queue-post-render-hooks 5)
+(def ^:const index-render-queue-offset 6)
 
 (def ^{:dynamic true} *component* nil)
 ;; Whether the current vnode has just been created or not
@@ -947,4 +948,4 @@
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
 ;; Add a test for the first case of duplicate keys
-;; javafx synchronous rendering
+;; cell factory hooks / keys

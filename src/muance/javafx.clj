@@ -9,7 +9,7 @@
             [muance.attributes :as attributes]
             [muance.animation-timer :as animation-timer]
             [clojure.tools.logging :as log]
-            #_[muance.list-cell :as list-cell])
+            [muance.list-cell :as list-cell])
   (:import [java.util ArrayList Collections]
            [javafx.collections ObservableList]
            [javafx.beans.property ObjectProperty]
@@ -736,29 +736,30 @@
         vnode (a/aget in 3)
         ;; depth == -1 means this was a call to muance.core/patch. In this case, the vnode is
         ;; the vtree vnode. We don't directly pass the vnode of the component at depth 0 because
-        ;; it is nil before the firs rendering and this would cause potential concurrency
+        ;; it is nil before the first rendering and this would cause potential concurrency
         ;; (multiple threads) problems
         depth (a/aget in 4)
         comp (if (= depth -1)
                (a/aget vnode diff/index-children 0)
                vnode)
-        synchronous? (a/aget in 5)
+        synchronous-promise (a/aget in 5)
         processing-flag (a/aget render-queue diff/index-render-queue-processing-flag)
-        dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)]
-    ;; comp == nil means this is the first render
-    (if (nil? comp)
+        dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)
+        first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)]
+    ;; if this is the first render
+    (if (not (realized? first-render-promise))
       ;; first render is synchronous
-      (let [p (promise)]
+      (do
         (run-later
          (try
            (diff/patch-impl render-queue vnode nil comp-fn props false)
            (diff/process-post-render-hooks render-queue)
            (catch Exception e
              (log/error e))
-           (finally (deliver p true))))
-        @p)
+           (finally (deliver first-render-promise true))))
+        @first-render-promise)
       (let [comp-data (a/aget comp diff/index-comp-data)]
-        ;; if the patch data are coming from a call to the patch fn
+        ;; if the patch data is coming from a call to the patch fn
         (if (= depth -1) 
           (if-let [dirty-comps (a/aget render-queue diff/index-render-queue-offset)]
             (do
@@ -782,13 +783,18 @@
                         (.add comp))))))
         (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag)
         (a/aset render-queue diff/index-render-queue-pending-flag true)
-        (if synchronous?
+        (if synchronous-promise
           (let [frozen-render-queue (make-frozen-render-queue render-queue)]
             (run-later
              (binding [diff/*rendered-flag* (Object.)]
-               (diff/process-render-queue frozen-render-queue)
-               ;; process-post-render-hooks with the original queue, not the frozen queue !
-               (diff/process-post-render-hooks render-queue))))
+               (try
+                 (diff/process-render-queue frozen-render-queue)
+                 ;; process-post-render-hooks with the original queue, not the frozen queue !
+                 (diff/process-post-render-hooks render-queue)
+                 (catch Exception e
+                   (log/error e))
+                 (finally (deliver synchronous-promise true)))))
+            @synchronous-promise)
           (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
             (a/aset render-queue diff/index-render-queue-processing-flag true)
             (start-animation-timer render-queue)))))))
@@ -813,7 +819,16 @@
       (handle-component-update in))))
 
 (defn- render-queue-fn [in]
-  (.put ^SynchronousQueue render-queue-in in))
+  (let [render-queue (a/aget in 0)
+        first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)
+        synchronous? (a/aget in 5)
+        synchronous-promise (when synchronous? (promise))]
+    (when synchronous-promise
+      (a/aset in 5 synchronous-promise))
+    (.put ^SynchronousQueue render-queue-in in)
+    @first-render-promise
+    (when synchronous-promise
+      @synchronous-promise)))
 
 (defn- render-queue-worker-loop []
   (loop []
@@ -835,22 +850,23 @@
    (vtree nil))
   ([{:keys [synchronous? post-render-hook]}]
    (let [vt (->JavafxVTree (swap! diff/vtree-ids inc)
-                          (new-root-vnode)
-                          ;; render-queue-fn + processing flag + pending flag + dirty-flag
-                          ;; + post-render-hooks + render-queue
-                          (doto (ArrayList. 6)
-                            (.add render-queue-fn)
-                            (.add false)
-                            (.add false)
-                            (.add (Object.))
-                            (.add (ArrayList.))
-                            (.add (ArrayList.)))
-                          synchronous?)]
+                           (new-root-vnode)
+                           ;; render-queue-fn + processing flag + pending flag + dirty-flag +
+                           ;; first-render-promise + post-render-hooks + render-queue
+                           (doto (ArrayList. 7)
+                             (.add render-queue-fn)
+                             (.add false)
+                             (.add false)
+                             (.add (Object.))
+                             (.add (promise))
+                             (.add (ArrayList.))
+                             (.add (ArrayList.)))
+                           synchronous?)]
      (when post-render-hook
        (set-post-render-hook vt post-render-hook))
      vt)))
 
-#_(defn list-cell-factory [comp]
+(defn list-cell-factory [comp]
   (reify javafx.util.Callback
     (call [this p]
       (let [state (ArrayList. 2)
@@ -861,15 +877,8 @@
         (set-post-render-hook
          vt
          (fn [_]
-           (prn (a/aget
-                         (vtree/vnode vt)
-                         diff/index-children
-                         0
-                         diff/index-node))
-           #_(.setGraphic list-cell
+           (.setGraphic list-cell
                         (a/aget
                          (vtree/vnode vt)
-                         diff/index-children
-                         0
                          diff/index-node))))
         list-cell))))
