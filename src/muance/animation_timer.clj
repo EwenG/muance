@@ -1,37 +1,26 @@
 (ns muance.animation-timer
-  (:require [muance.diff :as diff]))
+  (:require [muance.diff :as diff]
+            [clojure.tools.logging :as log])
+  (:import [muance.javafx AnimationTimer FrozenRenderQueue]))
 
-(deftype FrozenRenderQueue [origin-render-queue
-                            render-queue-in
-                            ;; A synchronous queue of frozen render queues
-                            render-queue-out])
-
-(gen-class
- :name "muance.javafx.AnimationTimer"
- :extends javafx.animation.AnimationTimer
- :prefix "animation-timer-"
- :state "frozen_render_queue"
- :constructors {[muance.animation_timer.FrozenRenderQueue] []}
- :init "init")
-
-(defn- animation-timer-init [frozen-render-queue]
-  [[] frozen-render-queue])
-
-(defn- animation-timer-handle [^muance.javafx.AnimationTimer this t]
-  (let [^FrozenRenderQueue frozen-render-queue (.frozen-render-queue this)
-        origin-render-queue (.origin-render-queue frozen-render-queue)
-        render-queue-in (.render-queue-in frozen-render-queue)
-        render-queue-out (.render-queue-out frozen-render-queue)]
+(defn animation-timer-handle [^AnimationTimer this t]
+  (let [frozen-render-queue (.getFrozenRenderQueue this)
+        origin-render-queue (.getOriginRendeQueue frozen-render-queue)
+        render-queue-in (.getRenderQueueIn frozen-render-queue)
+        render-queue-out (.getRenderQueueOut frozen-render-queue)]
     (loop []
       ;; Query from the pending render-queue
-      (.put ^java.util.concurrent.SynchronousQueue render-queue-in frozen-render-queue)
+      (.put render-queue-in frozen-render-queue)
       ;; We get false when there is no more components to render
-      (let [render-queue (.take ^java.util.concurrent.SynchronousQueue render-queue-out)]
+      (let [render-queue (.take render-queue-out)]
         (when render-queue
-          (binding [diff/*rendered-flag* (Object.)]
-            (diff/process-render-queue render-queue)
-            ;; process-post-render-hooks with the origin queue, not the frozen queue !
-            (diff/process-post-render-hooks origin-render-queue))
+          (try
+            (binding [diff/*rendered-flag* (Object.)]
+              (diff/process-render-queue render-queue)
+              ;; process-post-render-hooks with the origin queue, not the frozen queue !
+              (diff/process-post-render-hooks origin-render-queue))
+            (catch Exception e
+              (log/error e)))
           (recur))))
     (.stop this)))
 
