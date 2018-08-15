@@ -7,7 +7,7 @@
      (o/get o k)))
 
 #?(:clj
-   (defn get [^java.util.HashMap o k]
+   (defn get [^java.util.Map o k]
      (.getOrDefault o k nil)))
 
 #?(:cljs
@@ -15,7 +15,7 @@
      (o/set o k v)))
 
 #?(:clj
-   (defn set [^java.util.HashMap o k v]
+   (defn set [^java.util.Map o k v]
      (.put o k v)))
 
 #?(:cljs
@@ -23,7 +23,7 @@
      (o/remove o k)))
 
 #?(:clj
-   (defn remove [^java.util.HashMap o k]
+   (defn remove [^java.util.Map o k]
      (.remove o k)))
 
 #?(:cljs
@@ -31,7 +31,7 @@
      (o/forEach o f)))
 
 #?(:clj
-   (defn forEach [^java.util.HashMap o f]
+   (defn forEach [^java.util.Map o f]
      (let [it (.iterator (.entrySet o))]
        (while (.hasNext it)
          (let [^java.util.Map$Entry entry (.next it)]
