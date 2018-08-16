@@ -948,4 +948,4 @@
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
 ;; Add a test for the first case of duplicate keys
-;; cell factory hooks / keys
+;; cell factory hooks / keys / state
