@@ -16,7 +16,14 @@
                      :children-getter 'getChildren}
                     {:name 'combo-box :tag 'javafx.scene.control.ComboBox
                      :children-getter 'getItems}
-                    {:name 'list-view :tag 'javafx.scene.control.ListView}})
+                    {:name 'list-view :tag 'javafx.scene.control.ListView
+                     :children-getter 'getItems}
+                    {:name 'v-box :tag 'javafx.scene.layout.VBox}
+                    {:name 'h-box :tag 'javafx.scene.layout.HBox}
+                    {:name 'label :tag 'javafx.scene.control.Label}
+                    {:name 'checkbox :tag 'javafx.scene.control.CheckBox}
+                    {:name 'anchor-pane :tag 'javafx.scene.layout.AnchorPane}
+                    {:name 'toggle-button :tag 'javafx.scene.control.ToggleButton}})
 
 (def element-macros javafx-nodes)
 
