@@ -26,7 +26,7 @@
 ;; - new-flag
 ;; See the documentation for these two flags for more details
 (def ^:const index-key-moved 10)
-;; keep track of the vnode sibling in order to reorder keyed vnodes duting child nodes
+;; keep track of the vnode sibling in order to reorder keyed vnodes during child nodes
 ;; reconciliation
 (def ^:const index-key-next-vnode 11)
 (def ^:const index-keymap 12)
@@ -56,11 +56,16 @@
 (def ^:const index-comp-data-rendered-flag 6)
 
 (def ^:const index-render-queue-fn 0)
+;; Whether the rendering thread is still rendering dirty components or not. Must only be modified by the batching thread
 (def ^:const index-render-queue-processing-flag 1)
+;; Whether dirty comps have been enqueued by the batching thread, waiting to be processed by the rendering thread. Must only be modified by the batching thread.
 (def ^:const index-render-queue-pending-flag 2)
+;; A flag used to know when a component has already be enqueued by the batching thread. Used to avoid to enqueue a component twice. Must only be modified by the batching thread. This flag is set on the component data at the index-comp-data-dirty-flag index.
 (def ^:const index-render-queue-dirty-flag 3)
 (def ^:const index-render-queue-first-render-promise 4)
+;; The prost render hooks. Must only be modified by the rendering thread.
 (def ^:const index-render-queue-post-render-hooks 5)
+;; The offset of the dirty comps in the rendering-queue. A component is enqueued by the batching thread at the index (+ component-depth index-render-queue-offset). Dirty components are reset to nil before beeing passed to the rendering thread. The dirty comps used by the rendering thread are a flat copy (not deep copy !) of the dirty comps. Thus the batching thread and the rendering thread do not share the same array. They can both mutate this array.
 (def ^:const index-render-queue-offset 6)
 
 (def ^{:dynamic true} *component* nil)
@@ -141,29 +146,29 @@
     (a/aget vnode index-comp-data index-comp-data-name)
     (a/aget vnode index-component index-comp-data index-comp-data-name)))
 
-(defn- dom-nodes* [acc vnode]
+(defn- nodes* [acc vnode]
   (if (component? vnode)
     (when-let [children (a/aget vnode index-children)]
       (let [l (a/length children)]
         (loop [i 0]
           (when (< i l)
-            (dom-nodes* acc (a/aget children i))
+            (nodes* acc (a/aget children i))
             (recur (inc i))))))
     (a/add acc (a/aget vnode index-node)))
   acc)
 
 (declare ref-node-down)
 
-(defn dom-nodes
-  "Return a vector of all the DOM nodes associated with vnode."
+(defn nodes
+  "Return a vector of all the real nodes associated with vnode."
   [vnode]
   (if (component? vnode)
-    (into [] (dom-nodes* #?(:cljs #js [] :clj (ArrayList.)) vnode))
+    (into [] (nodes* #?(:cljs #js [] :clj (ArrayList.)) vnode))
     [(a/aget vnode index-node)]))
 
-(defn dom-node
-  "Return the DOM nodes associated with vnode. Returns the first children of vnode if vnode is
-  a component and is associated with multiple DOM nodes."
+(defn node
+  "Return the real nodes associated with vnode. Returns the first children of vnode if vnode is
+  a component and is associated with multiple real nodes."
   [vnode]
   (if (component? vnode)
     (ref-node-down vnode)
@@ -224,8 +229,8 @@
       (if (and (component? *vnode-to-remove*)
                (a/aget *vnode-to-remove* index-children)
                (> (a/length (a/aget *vnode-to-remove* index-children)) 1))
-        (remove-hook (dom-nodes *vnode-to-remove*))
-        (remove-hook (dom-node *vnode-to-remove*)))))
+        (remove-hook (nodes *vnode-to-remove*))
+        (remove-hook (node *vnode-to-remove*)))))
   (when-let [children (a/aget vnode index-children)]
     (let [children-count (a/length children)]
       (loop [i 0]
@@ -286,7 +291,6 @@
 (defn insert-vnode-before* [parent-node vnode ref-node]
   (if (component? vnode)
     (when-let [children (a/aget vnode index-children)]
-      
       (let [l (a/length children)]
         (loop [i 0]
           (when (< i l)
@@ -486,7 +490,7 @@
                                                key))))
                     (when (identical? (a/aget moved-vnode index-key-moved) moving-flag)
                       (a/aset *vnode* index-keymap-invalid
-                            (dec (a/aget *vnode* index-keymap-invalid)))
+                              (dec (a/aget *vnode* index-keymap-invalid)))
                       ;; If the node is moving forward, it should be immediately removed because
                       ;; its key is unset
                       (set! *vnode-to-remove* moved-vnode))
@@ -621,7 +625,7 @@
         (a/aset *vnode* index-comp-props (if props? *props* no-props-flag))
         (set! *state* state)
         (a/aset *vnode* index-comp-state state)
-        (a/aset comp-data index-comp-data-dirty-flag nil)
+        (a/aset comp-data index-comp-data-rendered-flag *rendered-flag*)
         (a/aset comp-data index-comp-data-index-in-parent vnode-index)
         (when prev
           (if-let [prev-key (a/aget prev index-key)]
@@ -877,18 +881,18 @@
     (a/forEach post-renders call-post-render)
     (when global-post-render-hook (global-post-render-hook))))
 
-(defn process-render-queue [render-queue]
-  (let [l (a/length render-queue)]
+(defn process-render-queue [origin-render-queue frozen-render-queue]
+  (let [l (a/length frozen-render-queue)]
     (loop [i index-render-queue-offset]
       (when (< i l)
-        (when-let [comps (a/aget render-queue i)]
+        (when-let [comps (a/aget frozen-render-queue i)]
           (loop []
             (let [vnode (a/pop comps)
                   comp-fn (a/pop comps)
                   props (a/pop comps)]
               (when vnode
                 (when (not (already-rendered-component? vnode))
-                  (patch-impl render-queue
+                  (patch-impl origin-render-queue
                               (a/aget vnode index-parent-vnode)
                               vnode
                               comp-fn props false))
@@ -903,9 +907,9 @@
                                                        index-comp-data-state-ref)
             (.-component-data)
             (a/aget 2))
-        :else (-> ^muance.local_state.LocalStateAtom(a/aget vnode index-component
-                                                            index-comp-data
-                                                            index-comp-data-state-ref)
+        :else (-> ^muance.local_state.LocalStateAtom (a/aget vnode index-component
+                                                             index-comp-data
+                                                             index-comp-data-state-ref)
                   (.-component-data)
                   (a/aget 2))))
 
@@ -944,8 +948,12 @@
 
 ;; comp-fn is a var in order for refresh-roots to work even when redefining the root component
 
+;; list-view, tree-view ... cell factories are not used because it is hard to support with stateful vtrees / lifecycle hooks. Displaying a big list requires paging/lazy loading anyway
+
 ;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
 ;; Add a test for the first case of duplicate keys
-;; cell factory hooks / keys / state
+;; remove the m/vnode function
+;; javafx synchronous rendering
+;; swap! with post-render / patch-with-post-render
