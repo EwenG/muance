@@ -143,7 +143,7 @@
 
 (defn- on-1 [tag key f arg1]
   `(let [f# ~f
-         arg1# arg1]
+         arg1# ~arg1]
      (when (diff/compare-handlers-1 f# arg1#)
        (let [handler# (make-handler-1 f# arg1#)]
          (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag})
@@ -159,8 +159,8 @@
 
 (defn- on-2 [tag key f arg1 arg2]
   `(let [f# ~f
-         arg1# arg1
-         arg2# arg2]
+         arg1# ~arg1
+         arg2# ~arg2]
      (when (diff/compare-handlers-2 f# arg1# arg2#)
        (let [handler# (make-handler-2 f# arg1# arg2#)]
          (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag})
@@ -176,9 +176,9 @@
 
 (defn- on-3 [tag key f arg1 arg2 arg3]
   `(let [f# ~f
-         arg1# arg1
-         arg2# arg2
-         arg3# arg3]
+         arg1# ~arg1
+         arg2# ~arg2
+         arg3# ~arg3]
      (when (diff/compare-handlers-3 f# arg1# arg2# arg3#)
        (let [handler# (make-handler-3 f# arg1# arg2# arg3#)]
          (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag})
@@ -234,52 +234,57 @@
           (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag}) ~(symbol key))
           (make-listener-0 f#)))))
 
-(defn- listen-1 [key f arg1]
+(defn- listen-1 [tag key f arg1]
   `(let [f# ~f
-         arg1# arg1]
+         arg1# ~arg1]
      (when (diff/compare-handlers-1 f# arg1#)
-       (diff/set-handler-1
-        (. (a/aget diff/*vnode* diff/index-node) ~(symbol key)
-           (make-listener-1 f# arg1#))
-        f# arg1#))
+       (let [listener# (make-listener-1 f# arg1#)]
+         (handle-listener
+          (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag}) ~(symbol key))
+          listener#)
+         (diff/set-handler-1 listener# f# arg1#)))
      (diff/inc-attrs 3)))
 
-(defn- listen-static-1 [key f arg1]
+(defn- listen-static-1 [tag key f arg1]
   `(let [f# ~f]
      (when (diff/compare-handlers-static f#)
-       (. (a/aget diff/*vnode* diff/index-node) ~(symbol key)
-          (make-listener-1 f# ~arg1)))))
+       (handle-listener
+        (. (a/aget diff/*vnode* diff/index-node) ~(symbol key))
+        (make-listener-1 f# ~arg1)))))
 
-(defn- listen-2 [key f arg1 arg2]
+(defn- listen-2 [tag key f arg1 arg2]
   `(let [f# ~f
-         arg1# arg1
-         arg2# arg2]
+         arg1# ~arg1
+         arg2# ~arg2]
      (when (diff/compare-handlers-2 f# arg1# arg2#)
-       (diff/set-handler-2
-        (. (a/aget diff/*vnode* diff/index-node) ~(symbol key)
-           (make-listener-2 f# arg1# arg2#))
-        f# arg1# arg2#))
+       (let [listener# (make-listener-2 f# arg1# arg2#)]
+         (handle-listener
+          (. (a/aget diff/*vnode* diff/index-node) ~(symbol key))
+          listener#)
+         (diff/set-handler-2 listener# f# arg1# arg2#)))
      (diff/inc-attrs 4)))
 
-(defn- listen-static-2 [key f arg1 arg2]
+(defn- listen-static-2 [tag key f arg1 arg2]
   `(let [f# ~f]
      (when (diff/compare-handlers-static f#)
-       (. (a/aget diff/*vnode* diff/index-node) ~(symbol key)
-          (make-listener-2 f# ~arg1 ~arg2)))))
+       (handle-listener
+        (. (a/aget diff/*vnode* diff/index-node) ~(symbol key))
+        (make-listener-2 f# ~arg1 ~arg2)))))
 
-(defn- listen-3 [key f arg1 arg2 arg3]
+(defn- listen-3 [tag key f arg1 arg2 arg3]
   `(let [f# ~f
-         arg1# arg1
-         arg2# arg2
-         arg3# arg3]
+         arg1# ~arg1
+         arg2# ~arg2
+         arg3# ~arg3]
      (when (diff/compare-handlers-3 f# arg1# arg2# arg3#)
-       (diff/set-handler-3
-        (. (a/aget diff/*vnode* diff/index-node) ~(symbol key)
-           (make-listener-3 f# arg1# arg2# arg3#))
-        f# arg1# arg2# arg3#))
+       (let [listener# (make-listener-3 f# arg1# arg2# arg3#)]
+         (handle-listener
+          (. (a/aget diff/*vnode* diff/index-node) ~(symbol key))
+          listener#)
+         (diff/set-handler-3 listener# f# arg1# arg2# arg3#)))
      (diff/inc-attrs 5)))
 
-(defn- listen-static-3 [key f arg1 arg2 arg3]
+(defn- listen-static-3 [tag key f arg1 arg2 arg3]
   `(let [f# ~f]
      (when (diff/compare-handlers-static f#)
        (. (a/aget diff/*vnode* diff/index-node) ~(symbol key)
@@ -295,15 +300,15 @@
          (if (and (static? f) (every? static? args))
            (let [l (count args)]
              (cond (= 0 l) (listen-static-0 tag property-name f)
-                   (= 1 l) (listen-static-1 property-name f (nth args 0))
-                   (= 2 l) (listen-static-2 property-name f (nth args 0) (nth args 1))
-                   :else (listen-static-3 property-name f
+                   (= 1 l) (listen-static-1 tag property-name f (nth args 0))
+                   (= 2 l) (listen-static-2 tag property-name f (nth args 0) (nth args 1))
+                   :else (listen-static-3 tag property-name f
                                           (nth args 0) (nth args 1) (nth args 2))))
            (let [l (count args)]
              (cond (= 0 l) (listen-0 tag property-name f)
-                   (= 1 l) (listen-1 property-name f (nth args 0))
-                   (= 2 l) (listen-2 property-name f (nth args 0) (nth args 1))
-                   :else (listen-3 property-name f
+                   (= 1 l) (listen-1 tag property-name f (nth args 0))
+                   (= 2 l) (listen-2 tag property-name f (nth args 0) (nth args 1))
+                   :else (listen-3 tag property-name f
                                    (nth args 0) (nth args 1) (nth args 2))))))))))
 
 (defmulti maybe-cast-param (fn [env property-name param-type property-val]
@@ -395,10 +400,12 @@
 (defn- input-value [tag val]
   (let [node-sym (with-meta (gensym "node") {:tag tag})]
     `(let [val# (nil-or-string ~val)
-           ~node-sym (a/aget diff/*vnode* diff/index-node)]
-       (when (and (diff/compare-attrs val#)
-                  (not= (. ~node-sym ~'getText) val#))
-         (. ~node-sym ~'setText val#)
+           ~node-sym (a/aget diff/*vnode* diff/index-node)
+           prev-attrs# (or (a/aget diff/*vnode* diff/index-attrs) (ArrayList.))
+           prev-val# (a/aget prev-attrs# diff/*attrs-count*)]
+       (when (diff/compare-attrs val#)
+         (when (not= (. ~node-sym ~'getText) val#)
+           (. ~node-sym ~'setText val#))
          (diff/set-attr val#))
        (diff/inc-attrs 1))))
 
@@ -644,56 +651,74 @@
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.event.EventHandler
-        (handle [this e] (f e state-ref))))))
+        (handle [this e]
+          ;; Do not call handlers from the render loop
+          (when (nil? diff/*vnode*)
+            (f e state-ref)))))))
 
 (defn make-handler-1 [f arg1]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.event.EventHandler
-        (handle [this e] (f e state-ref arg1))))))
+        (handle [this e]
+          (when (nil? diff/*vnode*)
+            (f e state-ref arg1)))))))
 
 (defn make-handler-2 [f arg1 arg2]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.event.EventHandler
-        (handle [this e] (f e state-ref arg1 arg2))))))
+        (handle [this e]
+          (when (nil? diff/*vnode*)
+            (f e state-ref arg1 arg2)))))))
 
 (defn make-handler-3 [f state-ref arg1 arg2 arg3]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.event.EventHandler
-        (handle [this e] (f e state-ref arg1 arg2 arg3))))))
+        (handle [this e]
+          (when (nil? diff/*vnode*)
+            (f e state-ref arg1 arg2 arg3)))))))
 
 (defn make-listener-0 [f]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n] (f o n state-ref))))))
+        (changed [this observalbe o n]
+          ;; Do not call listeners when trigerring an update from the render loop
+          (when (nil? diff/*vnode*)
+            (f o n state-ref)))))))
 
 (defn make-listener-1 [f arg1]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n] (f o n state-ref arg1))))))
+        (changed [this observalbe o n]
+          (when (nil? diff/*vnode*)
+            (f o n state-ref arg1)))))))
 
 (defn make-listener-2 [f arg1 arg2]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n] (f o n state-ref arg1 arg2))))))
+        (changed [this observalbe o n]
+          (when (nil? diff/*vnode*)
+            (f o n state-ref arg1 arg2)))))))
 
 (defn make-listener-3 [f state-ref arg1 arg2 arg3]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n] (f o n state-ref arg1 arg2 arg3))))))
+        (changed [this observalbe o n]
+          (when (nil? diff/*vnode*)
+            (f o n state-ref arg1 arg2 arg3)))))))
 
 (defn handle-listener [^javafx.beans.value.ObservableValue property
                        ^javafx.beans.value.ChangeListener listener]
@@ -701,26 +726,20 @@
     (.removeListener property ^javafx.beans.value.ChangeListener diff/*handlers-prev*))
   (.addListener property listener))
 
-#_(defn comp->list-cell-factory [c]
-  (reify javafx.util.Callback
-    (call [cb p]
-      (let [vt (vtree)]
-        (reify javafx.scene.control.ListCell
-          (updateItem [list-cell item empty]))))))
-
 (defonce ^:private render-queue-in (SynchronousQueue. true))
 
-;; Returns a frozen render queue and resets the origin render-queue as a side effect
+;; Returns a frozen render queue and resets the dirty-comps of the origin render-queue
+;; as a side effect
+;; Returns an array with the same size than the render-queue instead of only the dirty comps in order
+;; to avoid a useless copy for single threaded implementations
 (defn- make-frozen-render-queue [render-queue]
   (let [l (a/length render-queue)
-        frozen-queue (ArrayList. ^int l)
-        it (.iterator ^ArrayList render-queue)
-        components-length (a/length (a/aget render-queue diff/index-render-queue-offset))]
+        frozen-queue (ArrayList. ^int l)]
     (loop [i diff/index-render-queue-offset]
       (when (< i l)
         (a/aset frozen-queue i (a/aget render-queue i))
+        (a/aset render-queue i nil)
         (recur (inc i))))
-    (a/aset render-queue diff/index-render-queue-offset (ArrayList. ^int components-length))
     frozen-queue))
 
 (defn- start-animation-timer [render-queue]
@@ -788,7 +807,7 @@
             (run-later
              (binding [diff/*rendered-flag* (Object.)]
                (try
-                 (diff/process-render-queue frozen-render-queue)
+                 (diff/process-render-queue render-queue frozen-render-queue)
                  ;; process-post-render-hooks with the original queue, not the frozen queue !
                  (diff/process-post-render-hooks render-queue)
                  (catch Exception e
@@ -819,6 +838,8 @@
       (handle-component-update in))))
 
 (defn- render-queue-fn [in]
+  (assert (nil? diff/*vnode*)
+          "Cannot call muance.core/patch or mutate local-state inside render loop")
   (let [render-queue (a/aget in 0)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)
         synchronous? (a/aget in 5)
@@ -852,15 +873,16 @@
    (let [vt (->JavafxVTree (swap! diff/vtree-ids inc)
                            (new-root-vnode)
                            ;; render-queue-fn + processing flag + pending flag + dirty-flag +
-                           ;; first-render-promise + post-render-hooks + render-queue
-                           (doto (ArrayList. 7)
+                           ;; first-render-promise + post-render-hooks +
+                           ;; dirty-comps (the rest of the arrayList)
+                           (doto (ArrayList. 20)
                              (.add render-queue-fn)
                              (.add false)
                              (.add false)
                              (.add (Object.))
                              (.add (promise))
                              (.add (ArrayList.))
-                             (.add (ArrayList.)))
+                             (.add (ArrayList. 3)))
                            synchronous?)]
      (when post-render-hook
        (set-post-render-hook vt post-render-hook))
