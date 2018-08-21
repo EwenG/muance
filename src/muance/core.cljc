@@ -172,7 +172,8 @@
           (str "muance.core/key was called outside of render loop"))
   (a/aget diff/*vnode* diff/index-key))
 
-;; Useful to systematically execute an action on the DOM after it has been updated
+;; Useful to systematically execute an action on the DOM after it has been updated, or execute
+;; and action after a ponctual state update from a handler. 
 (defn post-render
   "Registers a function to be executed after the next Muance render pass. Takes a vnode,
   the function to be executed and up to three optional parameters to be passed to the 
@@ -216,20 +217,20 @@
                         (.add arg2)
                         (.add arg3)))))))
 
-(defn dom-nodes
+(defn nodes
   "Return a vector of all the real nodes associated with vnode."
   []
   (assert (not (nil? diff/*vnode*))
-          (str "muance.core/dom-nodes was called outside of render loop"))
-  (diff/dom-nodes diff/*vnode*))
+          (str "muance.core/nodes was called outside of render loop"))
+  (diff/nodes diff/*vnode*))
 
-(defn dom-node
+(defn node
   "Return the real nodes associated with vnode. Returns the first children of vnode if vnode is
   a component and is associated with multiple real nodes."
   []
   (assert (not (nil? diff/*vnode*))
-          (str "muance.core/dom-node was called outside of render loop"))
-  (diff/dom-node diff/*vnode*))
+          (str "muance.core/node was called outside of render loop"))
+  (diff/node diff/*vnode*))
 
 ;;;;
 
