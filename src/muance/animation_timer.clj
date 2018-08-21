@@ -16,7 +16,7 @@
         (when render-queue
           (try
             (binding [diff/*rendered-flag* (Object.)]
-              (diff/process-render-queue render-queue)
+              (diff/process-render-queue origin-render-queue render-queue)
               ;; process-post-render-hooks with the origin queue, not the frozen queue !
               (diff/process-post-render-hooks origin-render-queue))
             (catch Exception e
