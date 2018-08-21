@@ -205,6 +205,8 @@
       (aset vnode diff/index-node fragment)
       (o/remove diff/roots (vtree/id vtree))))
   (core/refresh [vtree id]
+    (assert (nil? diff/*vnode*)
+            "Cannot call muance.core/patch or mutate local-state inside render loop")
     (let [vnode (vtree/vnode vtree)
           the-render-queue (vtree/render-queue vtree)
           children (a/aget vnode diff/index-children)]
@@ -285,10 +287,7 @@
               (a/aset dirty-comps 1 comp-fn)
               (a/aset dirty-comps 2 comp))
             (a/aset render-queue diff/index-render-queue-offset
-                    (doto (ArrayList. 3)
-                      (.add props)
-                      (.add comp-fn)
-                      (.add comp))))
+                    #js [props comp-fn comp]))
           (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
             (if-let [dirty-comps (a/aget render-queue (+ depth diff/index-render-queue-offset))]
               (do (a/add dirty-comps props)
@@ -300,7 +299,7 @@
         (a/aset render-queue diff/index-render-queue-pending-flag true)
         (if synchronous?
           (binding [diff/*rendered-flag* (js/Object.)]
-            (diff/process-render-queue render-queue)
+            (diff/process-render-queue render-queue render-queue)
             (diff/process-post-render-hooks render-queue)
             (a/aset render-queue diff/index-render-queue-processing-flag false)
             (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
@@ -310,7 +309,7 @@
              js/window 
              (fn []
                (binding [diff/*rendered-flag* (js/Object.)]
-                 (diff/process-render-queue render-queue)
+                 (diff/process-render-queue render-queue render-queue)
                  (diff/process-post-render-hooks render-queue)
                  (a/aset render-queue diff/index-render-queue-processing-flag false)
                  (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))))))))))
@@ -322,9 +321,10 @@
    (let [vt (->DOMVTree (swap! diff/vtree-ids inc)
                         (new-root-vnode)
                         ;; render-queue-fn + processing flag + pending flag + dirty-flag +
-                        ;; first-render-promise + post-render-hooks + render-queue
+                        ;; first-render-promise + post-render-hooks +
+                        ;; dirty-comps (the rest of the array)
                         #js [handle-component-update false false (js/Object.)
-                             nil #js [] #js []]
+                             nil #js [] #js[]]
                         synchronous?)]
      (when post-render-hook
        (a/aset (vtree/render-queue vt)
