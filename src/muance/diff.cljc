@@ -127,6 +127,8 @@
 ;; Used to enqueue components with a did-mount / will-unmount hook, and then call the hooks
 ;; in order
 (def components-queue #?(:cljs #js [] :clj (ArrayList.)))
+;; A function to be called after a muance render pass triggered by a call to muance.core/patch or a local state mutation
+(def ^:dynamic *post-render-fn* nil)
 
 (def ^{:dynamic true} *state* nil)
 (def ^{:dynamic true} *vnode* nil)
@@ -188,7 +190,7 @@
           render-queue-fn (a/aget render-queue index-render-queue-fn)
           component-depth (a/aget vnode index-comp-data index-comp-data-depth)]
       (render-queue-fn #?(:cljs #js [render-queue (a/aget vnode index-comp-props) comp-fn vnode
-                                     component-depth false false]
+                                     component-depth false *post-render-fn*]
                           :clj (doto (ArrayList. 7)
                                  (.add render-queue)
                                  (.add (a/aget vnode index-comp-props))
@@ -196,7 +198,7 @@
                                  (.add vnode)
                                  (.add component-depth)
                                  (.add false)
-                                 (.add false)))))))
+                                 (.add *post-render-fn*)))))))
 
 (defn parent-node [parent]
   (if (component? parent)
@@ -335,7 +337,7 @@
                      (when (identical? (a/aget v index-key-moved) moving-flag)
                        (remove-vnode v)
                        #?(:cljs (o/remove keymap k)
-                          :cljs (or/forEachRemove iterator))))))
+                          :clj (o/forEachRemove iterator))))))
       (a/aset vnode index-keymap-invalid 0))))
 
 (defn keyed-next-vnode [vnode]
@@ -861,14 +863,7 @@
     (call-did-mount-hooks (dec *components-queue-count*))))
 
 (defn call-post-render [post-render]
-  (when post-render
-    (when (not (fn? post-render))
-      (let [l (a/length post-render)]
-        (cond
-          (= l 1) ((a/aget post-render 0))
-          (= l 2) ((a/aget post-render 0) (a/aget post-render 1))
-          (= l 3) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2))
-          (= l 4) ((a/aget post-render 0) (a/aget post-render 1) (a/aget post-render 2) (a/aget post-render 3)))))))
+  (when post-render (post-render)))
 
 (defn process-post-render-hooks [render-queue]
   (let [post-renders (a/aget render-queue index-render-queue-post-render-hooks)
@@ -877,19 +872,35 @@
             #?(:cljs #js [global-post-render-hook]
                :clj (doto (ArrayList.)
                       (.add global-post-render-hook))))
-    (a/aset post-renders 0 nil)
-    (a/forEach post-renders call-post-render)
-    (when global-post-render-hook (global-post-render-hook))))
+    (a/forEach post-renders call-post-render)))
 
 (defn process-render-queue [origin-render-queue frozen-render-queue]
-  (let [l (a/length frozen-render-queue)]
-    (loop [i index-render-queue-offset]
+  (let [l (a/length frozen-render-queue)
+        post-render-hooks (a/aget origin-render-queue index-render-queue-post-render-hooks)]
+    ;; the vnode at depth -1 is the root vnode, not a component
+    ;; Using two different depths (-1 and 0) for the root component is useful to avoid concurrent
+    ;; issues (multithreads)
+    (when-let [comps (a/aget frozen-render-queue index-render-queue-offset)]
+      (let [vnode (a/pop comps)
+            comp-fn (a/pop comps)
+            props (a/pop comps)
+            post-render-fn (a/pop comps)]
+        (when post-render-fn (a/add post-render-hooks post-render-fn))
+        (when vnode
+          (let [vnode (a/aget vnode index-children 0)]
+            (patch-impl origin-render-queue
+                        (a/aget vnode index-parent-vnode)
+                        vnode
+                        comp-fn props false)))))
+    (loop [i (inc index-render-queue-offset)]
       (when (< i l)
         (when-let [comps (a/aget frozen-render-queue i)]
           (loop []
             (let [vnode (a/pop comps)
                   comp-fn (a/pop comps)
-                  props (a/pop comps)]
+                  props (a/pop comps)
+                  post-render-fn (a/pop comps)]
+              (when post-render-fn (a/add post-render-hooks post-render-fn))
               (when vnode
                 (when (not (already-rendered-component? vnode))
                   (patch-impl origin-render-queue
@@ -954,6 +965,4 @@
 ;; hooks-map -> Working with the Clojure :elide-meta option?
 ;; native arithmetic
 ;; Add a test for the first case of duplicate keys
-;; remove the m/vnode function
-;; javafx synchronous rendering
-;; swap! with post-render / patch-with-post-render
+
