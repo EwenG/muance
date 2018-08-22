@@ -173,49 +173,21 @@
   (a/aget diff/*vnode* diff/index-key))
 
 ;; Useful to systematically execute an action on the DOM after it has been updated, or execute
-;; and action after a ponctual state update from a handler. 
+;; and action after a state update from a handler. 
 (defn post-render
-  "Registers a function to be executed after the next Muance render pass. Takes a vnode,
-  the function to be executed and up to three optional parameters to be passed to the 
-  function f."
-  ([f]
-   (assert (not (nil? diff/*vnode*))
-           (str "muance.core/post-render was called outside of render loop"))
-   (-> (diff/get-render-queue diff/*vnode*)
-       (a/aget diff/index-render-queue-post-render-hooks)
-       (a/add #?(:cljs #js [f]
-                 :clj (doto (ArrayList.)
-                        (.add f))))))
-  ([f arg1]
-   (assert (not (nil? diff/*vnode*))
-           (str "muance.core/post-render was called outside of render loop"))
-   (-> (diff/get-render-queue diff/*vnode*)
-       (a/aget diff/index-render-queue-post-render-hooks)
-       (a/add #?(:cljs #js [f arg1]
-                 :clj (doto (ArrayList.)
-                        (.add f)
-                        (.add arg1))))))
-  ([f arg1 arg2]
-   (assert (not (nil? diff/*vnode*))
-           (str "muance.core/post-render was called outside of render loop"))
-   (-> (diff/get-render-queue diff/*vnode*)
-       (a/aget diff/index-render-queue-post-render-hooks)
-       (a/add #?(:cljs #js [f arg1 arg2]
-                 :clj (doto (ArrayList.)
-                        (.add f)
-                        (.add arg1)
-                        (.add arg2))))))
-  ([f arg1 arg2 arg3]
-   (assert (not (nil? diff/*vnode*))
-           (str "muance.core/post-render was called outside of render loop"))
-   (-> (diff/get-render-queue diff/*vnode*)
-       (a/aget diff/index-render-queue-post-render-hooks)
-       (a/add #?(:cljs #js [f arg1 arg2 arg3]
-                 :clj (doto (ArrayList.)
-                        (.add f)
-                        (.add arg1)
-                        (.add arg2)
-                        (.add arg3)))))))
+  "Registers a function to be executed after the next Muance render pass."
+  [f]
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/post-render was called outside of render loop"))
+  (-> (diff/get-render-queue diff/*vnode*)
+      (a/aget diff/index-render-queue-post-render-hooks)
+      (a/add f)))
+
+(defmacro with-post-render
+  "Executes the function f after a muance render pass triggered by a call to muance.core/patch or a local state mutation contained in body."
+  [f & body]
+  `(binding [diff/*post-render-fn* ~f]
+     ~@body))
 
 (defn nodes
   "Return a vector of all the real nodes associated with vnode."
@@ -242,23 +214,18 @@
    (let [render-queue (vtree/render-queue vtree)
          render-queue-fn (a/aget render-queue diff/index-render-queue-fn)]
      (render-queue-fn #?(:cljs #js [(vtree/render-queue vtree) props component
-                                    (vtree/vnode vtree) -1 false false]
-                         :clj (doto (ArrayList. 7)
+                                    (vtree/vnode vtree) -1 false diff/*post-render-fn*]
+                         :clj (doto (ArrayList. 6)
                                 (.add (vtree/render-queue vtree))
                                 (.add props)
                                 (.add component)
                                 (.add (vtree/vnode vtree))
                                 (.add -1)
                                 (.add (vtree/synchronous? vtree))
-                                (.add false)))))))
+                                (.add diff/*post-render-fn*)))))))
 
 (defn state []
   (assert (not (nil? diff/*vnode*)) (str "muance.core/state was called outside of render loop"))
   diff/*state*)
-
-(defn vnode []
-  (assert (not (nil? diff/*vnode*)) (str "muance.core/vnode was called outside of render loop"))
-  diff/*vnode*)
-
 
 ;; Most public API are required to be called in the render-loop in order to be called on the rendering thread and to avoid sharing mutable data accross threads
