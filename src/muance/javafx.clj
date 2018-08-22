@@ -758,10 +758,7 @@
         ;; it is nil before the first rendering and this would cause potential concurrency
         ;; (multiple threads) problems
         depth (a/aget in 4)
-        comp (if (= depth -1)
-               (a/aget vnode diff/index-children 0)
-               vnode)
-        synchronous-promise (a/aget in 5)
+        post-render-fn (a/aget in 6)
         processing-flag (a/aget render-queue diff/index-render-queue-processing-flag)
         dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)]
@@ -772,51 +769,48 @@
         (run-later
          (try
            (diff/patch-impl render-queue vnode nil comp-fn props false)
+           (when post-render-fn
+             (a/add (a/aget render-queue diff/index-render-queue-post-render-hooks)
+                    post-render-fn))
            (diff/process-post-render-hooks render-queue)
            (catch Exception e
              (log/error e))
            (finally (deliver first-render-promise true))))
         @first-render-promise)
-      (let [comp-data (a/aget comp diff/index-comp-data)]
+      (do
         ;; if the patch data is coming from a call to the patch fn
         (if (= depth -1) 
           (if-let [dirty-comps (a/aget render-queue diff/index-render-queue-offset)]
             (do
-              (a/aset dirty-comps 0 props)
-              (a/aset dirty-comps 1 comp-fn)
-              (a/aset dirty-comps 2 comp))
+              (a/aset dirty-comps 0 post-render-fn)
+              (a/aset dirty-comps 1 props)
+              (a/aset dirty-comps 2 comp-fn)
+              (a/aset dirty-comps 3 vnode))
             (a/aset render-queue diff/index-render-queue-offset
-                    (doto (ArrayList. 3)
+                    (doto (ArrayList. 4)
+                      (.add post-render-fn)
                       (.add props)
                       (.add comp-fn)
-                      (.add comp))))
-          (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
-            (if-let [dirty-comps (a/aget render-queue (+ depth diff/index-render-queue-offset))]
-              (do (a/add dirty-comps props)
-                  (a/add dirty-comps comp-fn)
-                  (a/add dirty-comps comp))
-              (a/aset render-queue (+ depth diff/index-render-queue-offset)
-                      (doto (ArrayList.)
-                        (.add props)
-                        (.add comp-fn)
-                        (.add comp))))))
-        (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag)
+                      (.add vnode))))
+          (let [comp-data (a/aget vnode diff/index-comp-data)]
+            (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
+              (if-let [dirty-comps (a/aget render-queue
+                                           (+ (inc depth) diff/index-render-queue-offset))]
+                (do (a/add dirty-comps post-render-fn)
+                    (a/add dirty-comps props)
+                    (a/add dirty-comps comp-fn)
+                    (a/add dirty-comps vnode))
+                (a/aset render-queue (+ (inc depth) diff/index-render-queue-offset)
+                        (doto (ArrayList. 4)
+                          (.add post-render-fn)
+                          (.add props)
+                          (.add comp-fn)
+                          (.add vnode))))
+              (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag))))
         (a/aset render-queue diff/index-render-queue-pending-flag true)
-        (if synchronous-promise
-          (let [frozen-render-queue (make-frozen-render-queue render-queue)]
-            (run-later
-             (binding [diff/*rendered-flag* (Object.)]
-               (try
-                 (diff/process-render-queue render-queue frozen-render-queue)
-                 ;; process-post-render-hooks with the original queue, not the frozen queue !
-                 (diff/process-post-render-hooks render-queue)
-                 (catch Exception e
-                   (log/error e))
-                 (finally (deliver synchronous-promise true)))))
-            @synchronous-promise)
-          (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
-            (a/aset render-queue diff/index-render-queue-processing-flag true)
-            (start-animation-timer render-queue)))))))
+        (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
+          (a/aset render-queue diff/index-render-queue-processing-flag true)
+          (start-animation-timer render-queue))))))
 
 (defn- handle-animation-timer-request [^FrozenRenderQueue in]
   (let [render-queue (.getOriginRendeQueue in)
@@ -837,19 +831,48 @@
       (handle-animation-timer-request in)
       (handle-component-update in))))
 
+(defn synchronous-render [in]
+  (let [render-queue (a/aget in 0)
+        props (a/aget in 1)
+        comp-fn (a/aget in 2)
+        vnode (a/aget in 3)
+        depth (a/aget in 4)
+        post-render-fn (a/aget in 6)
+        first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)]
+    (binding [diff/*rendered-flag* (Object.)]
+      (try
+        (cond
+          (not (realized? first-render-promise))
+          (diff/patch-impl render-queue vnode nil comp-fn props false)
+          (= depth -1)
+          (diff/patch-impl render-queue vnode (a/aget vnode diff/index-children 0)
+                           comp-fn props false)
+          :else
+          (diff/patch-impl render-queue (a/aget vnode diff/index-parent-vnode) vnode
+                           comp-fn props false))
+        (when post-render-fn
+          (a/add (a/aget render-queue diff/index-render-queue-post-render-hooks)
+                 post-render-fn))
+        (diff/process-post-render-hooks render-queue)
+        (catch Exception e
+          (log/error e))
+        (finally (deliver first-render-promise true))))))
+
 (defn- render-queue-fn [in]
   (assert (nil? diff/*vnode*)
           "Cannot call muance.core/patch or mutate local-state inside render loop")
   (let [render-queue (a/aget in 0)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)
-        synchronous? (a/aget in 5)
-        synchronous-promise (when synchronous? (promise))]
-    (when synchronous-promise
-      (a/aset in 5 synchronous-promise))
-    (.put ^SynchronousQueue render-queue-in in)
-    @first-render-promise
-    (when synchronous-promise
-      @synchronous-promise)))
+        synchronous? (a/aget in 5)]
+    (if synchronous?
+      (if (javafx.application.Platform/isFxApplicationThread)
+        (synchronous-render in)
+        (let [synchronous-promise (promise)]
+          (run-later (synchronous-render in)
+                     (deliver synchronous-promise true))
+          @synchronous-promise))
+      (.put ^SynchronousQueue render-queue-in in))
+    @first-render-promise))
 
 (defn- render-queue-worker-loop []
   (loop []
