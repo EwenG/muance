@@ -1,0 +1,33 @@
+#items .list-cell {
+  -fx-cell-size: 45;
+}
+
+.strikethrough .text {
+  -fx-strikethrough: true;
+}
+
+.close_icon {
+  -fx-text-fill: #cc9a9a;
+  -fx-font-size: 1.5em;
+  -fx-font-family: FontAwesome
+}
+
+.close_icon:hover {
+  -fx-fill: #af5b5e;
+}
+
+.content_box .button {
+  -fx-background-color: none;
+}
+
+.item_root {
+  -fx-padding: 0.5em;
+}
+
+.check-box {
+  -fx-padding: 0em 1em 0em 0em;
+}
+
+.label {
+  -fx-font-size: 1.2em;
+}
