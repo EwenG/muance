@@ -10,10 +10,6 @@
     (.setScene javafx/stage (javafx.scene.Scene. root 300 250))
     (.show javafx/stage)))
 
-(javafx.scene.text.Font/loadFont
- (.toExternalForm (clojure.java.io/resource "fontawesome-webfont.ttf"))
- 10.0)
-
 (declare todo-state)
 
 (defn add-todo* [{:keys [counter items] :as todo-state} text]
@@ -220,14 +216,24 @@
 
 (add-watch todo-state ::todo-app (fn [k r o n] (m/patch vtree todo-app n)))
 
+(defn -main []
+  (javafx.scene.text.Font/loadFont
+   (.toExternalForm (clojure.java.io/resource "fontawesome-webfont.ttf"))
+   10.0)
+  (javafx/run-later
+   (init-stage)
+   (m/append-child (.getScene javafx/stage) vtree)
+   (.add ^java.util.List (.getStylesheets (.getScene javafx/stage))
+         (.toExternalForm (clojure.java.io/resource "todo.css"))))
+  (m/patch vtree todo-app @todo-state))
+
 (comment
-  (javafx/run-later (init-stage))
-  (m/append-child (.getScene javafx/stage) vtree)
+  (-main)
 
   (do
     (m/patch vtree todo-app @todo-state)
     (javafx/run-later
      (.clear ^java.util.List (.getStylesheets (.getScene javafx/stage)))
      (.add ^java.util.List (.getStylesheets (.getScene javafx/stage))
-           (.toExternalForm (clojure.java.io/resource "muance/todofx/todo.css")))))
+           (.toExternalForm (clojure.java.io/resource "todo.css")))))
   )
