@@ -84,13 +84,8 @@
        :params (.getParameterTypes ^java.lang.reflect.Method method)})))
 
 (defn seqable->observable-list [s]
-  (if (seqable? s)
-    (let [o-list (javafx.collections.FXCollections/observableArrayList)]
-      (loop [s (seq s)]
-        (when-let [f (first s)]
-          (.add o-list f)
-          (recur (next s))))
-      o-list)
+  (if (sequential? s)
+    (javafx.collections.FXCollections/observableArrayList (seq s))
     s))
 
 (defn- as-property [tag property]
@@ -576,7 +571,7 @@
   (context/create-element [tag] nil)
   Class
   (context/create-element [c]
-    (.newInstance c)))
+    (.newInstance (.getDeclaredConstructor c (make-array Class)) (make-array Object))))
 
 ;;;;;;;;;;;;;
 
