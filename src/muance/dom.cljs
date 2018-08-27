@@ -279,42 +279,43 @@
         (diff/process-post-render-hooks render-queue)
         (a/aset render-queue diff/index-render-queue-first-render-promise true))
       ;; if the patch data is coming from a call to the patch fn
-      (if (= depth -1) 
-        (if-let [dirty-comps (a/aget render-queue diff/index-render-queue-offset)]
-          (do
-            (a/aset dirty-comps 0 post-render-fn)
-            (a/aset dirty-comps 1 props)
-            (a/aset dirty-comps 2 comp-fn)
-            (a/aset dirty-comps 3 vnode))
-          (a/aset render-queue diff/index-render-queue-offset
-                  #js [post-render-fn props comp-fn vnode]))
-        (let [comp-data (a/aget vnode diff/index-comp-data)]
-          (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
-            (if-let [dirty-comps (a/aget render-queue (+ (inc depth) diff/index-render-queue-offset))]
-              (do (a/add dirty-comps post-render-fn)
-                  (a/add dirty-comps props)
-                  (a/add dirty-comps comp-fn)
-                  (a/add dirty-comps vnode))
-              (a/aset render-queue (+ (inc depth) diff/index-render-queue-offset)
-                      #js [post-render-fn props comp-fn vnode]))
-            (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag))))
-      (a/aset render-queue diff/index-render-queue-pending-flag true)
-      (if synchronous?
-        (binding [diff/*rendered-flag* (js/Object.)]
-          (diff/process-render-queue render-queue render-queue)
-          (diff/process-post-render-hooks render-queue)
-          (a/aset render-queue diff/index-render-queue-processing-flag false)
-          (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
-        (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
-          (a/aset render-queue diff/index-render-queue-processing-flag true)
-          (.requestAnimationFrame
-           js/window 
-           (fn []
-             (binding [diff/*rendered-flag* (js/Object.)]
-               (diff/process-render-queue render-queue render-queue)
-               (diff/process-post-render-hooks render-queue)
-               (a/aset render-queue diff/index-render-queue-processing-flag false)
-               (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.))))))))))
+      (do
+        (if (= depth -1) 
+          (if-let [dirty-comps (a/aget render-queue diff/index-render-queue-offset)]
+            (do
+              (a/aset dirty-comps 0 post-render-fn)
+              (a/aset dirty-comps 1 props)
+              (a/aset dirty-comps 2 comp-fn)
+              (a/aset dirty-comps 3 vnode))
+            (a/aset render-queue diff/index-render-queue-offset
+                    #js [post-render-fn props comp-fn vnode]))
+          (let [comp-data (a/aget vnode diff/index-comp-data)]
+            (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
+              (if-let [dirty-comps (a/aget render-queue (+ (inc depth) diff/index-render-queue-offset))]
+                (do (a/add dirty-comps post-render-fn)
+                    (a/add dirty-comps props)
+                    (a/add dirty-comps comp-fn)
+                    (a/add dirty-comps vnode))
+                (a/aset render-queue (+ (inc depth) diff/index-render-queue-offset)
+                        #js [post-render-fn props comp-fn vnode]))
+              (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag))))
+        (a/aset render-queue diff/index-render-queue-pending-flag true)
+        (if synchronous?
+          (binding [diff/*rendered-flag* (js/Object.)]
+            (diff/process-render-queue render-queue render-queue)
+            (diff/process-post-render-hooks render-queue)
+            (a/aset render-queue diff/index-render-queue-processing-flag false)
+            (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
+          (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
+            (a/aset render-queue diff/index-render-queue-processing-flag true)
+            (.requestAnimationFrame
+             js/window 
+             (fn []
+               (binding [diff/*rendered-flag* (js/Object.)]
+                 (diff/process-render-queue render-queue render-queue)
+                 (diff/process-post-render-hooks render-queue)
+                 (a/aset render-queue diff/index-render-queue-processing-flag false)
+                 (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))))))))))
 
 (defn vtree
   ([]
