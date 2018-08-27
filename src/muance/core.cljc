@@ -87,10 +87,6 @@
             (diff/close-comp parent-component# hooks#)))))))
 
 #?(:clj
-   (defn var-meta [env sym]
-     ))
-
-#?(:clj
    (defmacro hooks
      "Attaches a set of lifecycle hooks to a Muance component. hooks-map must be a literal map of
   lifecycle hooks."
