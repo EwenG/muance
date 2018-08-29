@@ -190,12 +190,11 @@
   (when (and (> diff/*new-node* 0) (not (nil? val)))
     (set-style-custom key (str val))))
 
-(deftype DOMVTree [id vnode render-queue synchronous?]
+(deftype DOMVTree [id vnode render-queue]
   vtree/VTree
   (vtree/id [this] id)
   (vtree/vnode [this] vnode)
   (vtree/render-queue [this] render-queue)
-  (vtree/synchronous? [this] synchronous?)
   core/VTree
   (core/remove [vtree]
     (let [vnode (vtree/vnode vtree)
@@ -266,8 +265,8 @@
         ;; it is nil before the firs rendering and this would cause potential concurrency
         ;; (multiple threads) problems
         depth (a/aget in 4)
-        synchronous? (a/aget in 5)
-        post-render-fn (a/aget in 6)
+        post-render-fn (a/aget in 5)
+        synchronous? (a/aget render-queue diff/index-render-queue-synchronous)
         processing-flag (a/aget render-queue diff/index-render-queue-processing-flag)
         dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)]
@@ -312,10 +311,10 @@
              js/window 
              (fn []
                (binding [diff/*rendered-flag* (js/Object.)]
-                 (diff/process-render-queue render-queue render-queue)
-                 (diff/process-post-render-hooks render-queue)
                  (a/aset render-queue diff/index-render-queue-processing-flag false)
-                 (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))))))))))
+                 (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.))
+                 (diff/process-render-queue render-queue render-queue)
+                 (diff/process-post-render-hooks render-queue))))))))))
 
 (defn vtree
   ([]
@@ -323,12 +322,11 @@
   ([{:keys [synchronous? post-render-hook]}]
    (let [vt (->DOMVTree (swap! diff/vtree-ids inc)
                         (new-root-vnode)
-                        ;; render-queue-fn + processing flag + pending flag + dirty-flag +
-                        ;; first-render-promise + post-render-hooks +
+                        ;; render-queue-fn + synchronous + processing flag + pending flag +
+                        ;; dirty-flag + first-render-promise + post-render-hooks +
                         ;; dirty-comps (the rest of the array)
-                        #js [handle-component-update false false (js/Object.)
-                             false #js [] #js[]]
-                        synchronous?)]
+                        #js [#'handle-component-update synchronous? false false (js/Object.)
+                             false #js [] #js[]])]
      (when post-render-hook
        (a/aset (vtree/render-queue vt)
                diff/index-render-queue-post-render-hooks 0
@@ -336,18 +334,24 @@
      vt)))
 
 (defn set-timeout
-  "Execute f after a delay expressed in milliseconds. The first argument of f is the local state reference of the vnode component."
-  [vnode f millis]
-  (assert vnode "muance.core/set-timeout expects a vnode.")
-  (let [component (if (diff/component? vnode) vnode (aget vnode diff/index-component))
+  "Execute f after a delay expressed in milliseconds. The first argument of f is the local state reference of the current component."
+  [f millis]
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.dom/set-timeout was called outside of render loop"))
+  (let [component (if (diff/component? diff/*vnode*)
+                    diff/*vnode*
+                    (aget diff/*vnode* diff/index-component))
         state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
     (.setTimeout js/window (fn [] (f state-ref)) millis)))
 
 (defn set-interval
-  "Periodically execute f. The period is expressed in milliseconds. The first argument of f is the local state reference of the vnode component."
-  [vnode f millis]
-  (assert vnode "muance.core/set-timeout expects a vnode.")
-  (let [component (if (diff/component? vnode) vnode (aget vnode diff/index-component))
+  "Periodically execute f. The period is expressed in milliseconds. The first argument of f is the local state reference of the current component."
+  [f millis]
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.dom/set-interval was called outside of render loop"))
+  (let [component (if (diff/component? diff/*vnode*)
+                    diff/*vnode*
+                    (aget diff/*vnode* diff/index-component))
         state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
     (.setInterval js/window (fn [] (f state-ref)) millis)))
 
