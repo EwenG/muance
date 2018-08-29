@@ -1,8 +1,8 @@
 (ns muance.core-test
   (:require [cljs.test :refer [deftest testing is run-tests]]
             [goog.object :as o]
-            [muance.core :as m :include-macros true]
-            [muance.dom :as dom :include-macros true]
+            [muance.core :as m]
+            [muance.dom :as dom]
             [muance.attributes :as a]
             [muance.utils-test :as utils]
             [muance.custom-tags :as tag :include-macros true])
@@ -157,11 +157,11 @@
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree attrs-c
-                {:class1 68 :dyn-attr "val4" :bg-cond true :color "green"
+                {:class1 69 :dyn-attr "val4" :bg-cond true :color "green"
                  :input-value "tt8"
                  :for-val "rr1"
                  :checkbox-value nil :checkbox-checked "e"
-                 :selected true}))
+                 :selected false}))
 
 
 
