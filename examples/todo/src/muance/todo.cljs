@@ -1,6 +1,7 @@
 (ns muance.todo
   (:require
    [muance.core :as m :include-macros true]
+   [muance.dom :as dom :include-macros true]
    [clojure.string]
    [goog.object :as o])
   (:require-macros [muance.h :as h]))
@@ -86,7 +87,7 @@
     nil))
 
 (defn focus-node [props state]
-  (.focus (m/dom-node (m/vnode))))
+  (.focus (m/node)))
 
 (defn todo-edit [title id]
   (h/input :class "edit"
@@ -103,13 +104,13 @@
   (h/a
    :class (when (= name filt) "selected")
    ::m/on [:click filter-handler name]
-   (m/text text)))
+   (dom/text text)))
 
 (m/defcomp todo-stats [{:keys [filt active done]}]
   (h/span
    :class "todo-count"
-   (h/strong (m/text active))
-   (m/text " " (case active 1 "item" "items") " left"))
+   (h/strong (dom/text active))
+   (dom/text " " (case active 1 "item" "items") " left"))
   (h/ul
    :class "filters"
    (h/li (todo-stats-link filt :all "All"))
@@ -118,7 +119,7 @@
   (when (pos? done)
     (h/button
      :class "clear-completed"
-     ::m/on [:click clear-done] (m/text "Clear completed " done))))
+     ::m/on [:click clear-done] (dom/text "Clear completed " done))))
 
 (defn set-editing [e state-ref b]
   (swap! state-ref assoc :editing b))
@@ -131,7 +132,7 @@
     (h/input
      :class "toggle" :type "checkbox" :checked done
      ::m/on [:change toggle-handler id])
-    (h/label ::m/on [:dblclick set-editing true] (m/text title))
+    (h/label ::m/on [:dblclick set-editing true] (dom/text title))
     (h/button
      :class "destroy"
      ::m/on [:click delete-handler id]))
@@ -179,12 +180,12 @@
 
 (defonce todo-state (atom init-state))
 
-(defonce css-vtree (m/vtree))
-(m/append-child css-vtree (.-head js/document))
+(defonce css-vtree (dom/vtree))
+(m/append-child (.-head js/document) css-vtree)
 (m/patch css-vtree css)
 
-(defonce vtree (m/vtree))
-(m/append-child vtree (.-body js/document))
+(defonce vtree (dom/vtree {:synchronous? true}))
+(m/append-child (.-body js/document) vtree)
 (m/patch vtree todo-app @todo-state)
 
 (add-watch todo-state ::todo-app (fn [k r o n] (m/patch vtree todo-app n)))
@@ -192,7 +193,7 @@
 (comment
 
   (m/remove css-vtree)
-  (set! vtree (m/vtree))
+  (set! vtree (dom/vtree))
 
   (reset! todo-state init-state)
   
