@@ -21,7 +21,7 @@
            [java.util.concurrent SynchronousQueue]
            [muance.javafx AnimationTimer FrozenRenderQueue ListCell]))
 
-(defonce stage (init/start-app))
+(defonce ^Stage stage (init/start-app))
 
 (defonce ^:private typeid (atom 1))
 
@@ -85,7 +85,7 @@
 
 (defn seqable->observable-list [s]
   (if (sequential? s)
-    (javafx.collections.FXCollections/observableArrayList (seq s))
+    (javafx.collections.FXCollections/observableArrayList ^java.util.Collection (seq s))
     s))
 
 (defn- as-property [tag property]
@@ -319,10 +319,11 @@
 (defn nil-or-string [v]
   (if (nil? v) nil (str v)))
 
-(defn- prop [key val]
+(defn- prop [tag key val]
   `(let [val# ~val]
      (when (diff/compare-attrs val#)
-       (. (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)
+       (. ~(with-meta `(a/aget diff/*vnode* diff/index-node) {:tag tag})
+          ~(symbol key) val#)
        (diff/set-attr val#))
      (diff/inc-attrs 1)))
 
@@ -381,7 +382,7 @@
      (style-remove-nils! val# 0 (a/length val#))
      (let [val# (join-strings val#)]
        (when (diff/compare-attrs val#)
-         (. (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)
+         (. ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)
          (diff/set-attr val#)))
      (diff/inc-attrs 1)))
 
@@ -390,7 +391,7 @@
      (style-remove-nils! val# 0 (a/length val#))
      (let [val# (join-strings val#)]
        (when (and (> diff/*new-node* 0) (not (nil? val#)))
-         (. (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)))))
+         (. ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)))))
 
 (defn- input-value [tag val]
   (let [node-sym (with-meta (gensym "node") {:tag tag})]
@@ -439,6 +440,7 @@
                                      property-name
                                      (maybe-cast-param env property-name param-type v))
                                     (prop
+                                     tag
                                      property-name
                                      (maybe-cast-param env property-name param-type v)))))))
           '() attrs))
@@ -571,7 +573,8 @@
   (context/create-element [tag] nil)
   Class
   (context/create-element [c]
-    (.newInstance (.getDeclaredConstructor c (make-array Class)) (make-array Object))))
+    (.newInstance (.getDeclaredConstructor c (make-array Class 0))
+                  (make-array Object 0))))
 
 ;;;;;;;;;;;;;
 
@@ -581,12 +584,11 @@
 (defmacro run-later [& body]
   `(run-later-fn (fn [] ~@body)))
 
-(deftype JavafxVTree [id vnode render-queue synchronous?]
+(deftype JavafxVTree [id vnode render-queue]
   vtree/VTree
   (vtree/id [this] id)
   (vtree/vnode [this] vnode)
   (vtree/render-queue [this] render-queue)
-  (vtree/synchronous? [this] synchronous?)
   m/VTree
   (m/remove [vtree]
     (let [vnode (vtree/vnode vtree)
@@ -858,7 +860,7 @@
           "Cannot call muance.core/patch or mutate local-state inside render loop")
   (let [render-queue (a/aget in 0)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)
-        synchronous? (a/aget in 5)]
+        synchronous? (a/aget render-queue diff/index-render-queue-synchronous)]
     (if synchronous?
       (if (javafx.application.Platform/isFxApplicationThread)
         (synchronous-render in)
@@ -890,35 +892,18 @@
   ([{:keys [synchronous? post-render-hook]}]
    (let [vt (->JavafxVTree (swap! diff/vtree-ids inc)
                            (new-root-vnode)
-                           ;; render-queue-fn + processing flag + pending flag + dirty-flag +
-                           ;; first-render-promise + post-render-hooks +
+                           ;; render-queue-fn + synchronous + processing flag + pending flag +
+                           ;; dirty-flag + first-render-promise + post-render-hooks +
                            ;; dirty-comps (the rest of the arrayList)
                            (doto (ArrayList. 20)
                              (.add render-queue-fn)
+                             (.add synchronous?)
                              (.add false)
                              (.add false)
                              (.add (Object.))
                              (.add (promise))
                              (.add (ArrayList.))
-                             (.add (ArrayList. 3)))
-                           synchronous?)]
+                             (.add (ArrayList. 3))))]
      (when post-render-hook
        (set-post-render-hook vt post-render-hook))
      vt)))
-
-(defn list-cell-factory [comp]
-  (reify javafx.util.Callback
-    (call [this p]
-      (let [state (ArrayList. 2)
-            list-cell (ListCell. list-cell/list-cell-updateItem state)
-            vt (vtree)]
-        (a/aset state list-cell/index-vtree vt)
-        (a/aset state list-cell/index-component comp)
-        (set-post-render-hook
-         vt
-         (fn [_]
-           (.setGraphic list-cell
-                        (a/aget
-                         (vtree/vnode vt)
-                         diff/index-node))))
-        list-cell))))
