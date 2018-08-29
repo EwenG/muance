@@ -4,5 +4,4 @@
 (defprotocol VTree
   (id [this])
   (vnode [this])
-  (render-queue [this])
-  (synchronous? [this]))
+  (render-queue [this]))
