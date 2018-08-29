@@ -4,7 +4,8 @@
             [muance.arrays :as a]))
 
 (def vnode-keys [:typeid :parent :node :component :chidren-count :children
-                 :attrs :unmount :remove-hook :key :key-moved :keyed-next-vnode :keymap :keymap-invalid])
+                 :attrs :user-data :unmount :remove-hook :key :key-moved :keyed-next-vnode
+                 :keymap :keymap-invalid])
 (def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 3 :props) (assoc 6 :state)))
 (def vnode-keys-text [:typeid :parent :node :text])
 (def comp-data-keys [:component-name :state-ref :svg-namespace :index-in-parent
