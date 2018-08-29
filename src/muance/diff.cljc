@@ -15,24 +15,25 @@
 (def ^:const index-children-count 4)
 (def ^:const index-children 5)
 (def ^:const index-attrs 6)
+(def ^:const index-user-data 7)
 ;; Unmount is stored on the node since it must be called when one of the parents of the node
 ;; is removed
-(def ^:const index-unmount 7)
-(def ^:const index-remove-hook 8)
-(def ^:const index-key 9)
+(def ^:const index-unmount 8)
+(def ^:const index-remove-hook 9)
+(def ^:const index-key 10)
 ;; A slot which stores one of two flags:
 ;; - moved-flag
 ;; - moving-flag
 ;; - new-flag
 ;; See the documentation for these two flags for more details
-(def ^:const index-key-moved 10)
+(def ^:const index-key-moved 11)
 ;; keep track of the vnode sibling in order to reorder keyed vnodes during child nodes
 ;; reconciliation
-(def ^:const index-key-next-vnode 11)
-(def ^:const index-keymap 12)
+(def ^:const index-key-next-vnode 12)
+(def ^:const index-keymap 13)
 ;; When a keyed node is removed, the keymap is marked as invalid. Invalid keymaps are
 ;; cleaned when the close function of the node is called
-(def ^:const index-keymap-invalid 13)
+(def ^:const index-keymap-invalid 14)
 
 (def ^:const index-text 3)
 
@@ -56,17 +57,18 @@
 (def ^:const index-comp-data-rendered-flag 6)
 
 (def ^:const index-render-queue-fn 0)
+(def ^:const index-render-queue-synchronous 1)
 ;; Whether the rendering thread is still rendering dirty components or not. Must only be modified by the batching thread
-(def ^:const index-render-queue-processing-flag 1)
+(def ^:const index-render-queue-processing-flag 2)
 ;; Whether dirty comps have been enqueued by the batching thread, waiting to be processed by the rendering thread. Must only be modified by the batching thread.
-(def ^:const index-render-queue-pending-flag 2)
+(def ^:const index-render-queue-pending-flag 3)
 ;; A flag used to know when a component has already be enqueued by the batching thread. Used to avoid to enqueue a component twice. Must only be modified by the batching thread. This flag is set on the component data at the index-comp-data-dirty-flag index.
-(def ^:const index-render-queue-dirty-flag 3)
-(def ^:const index-render-queue-first-render-promise 4)
+(def ^:const index-render-queue-dirty-flag 4)
+(def ^:const index-render-queue-first-render-promise 5)
 ;; The prost render hooks. Must only be modified by the rendering thread.
-(def ^:const index-render-queue-post-render-hooks 5)
+(def ^:const index-render-queue-post-render-hooks 6)
 ;; The offset of the dirty comps in the rendering-queue. A component is enqueued by the batching thread at the index (+ component-depth index-render-queue-offset). Dirty components are reset to nil before beeing passed to the rendering thread. The dirty comps used by the rendering thread are a flat copy (not deep copy !) of the dirty comps. Thus the batching thread and the rendering thread do not share the same array. They can both mutate this array.
-(def ^:const index-render-queue-offset 6)
+(def ^:const index-render-queue-offset 7)
 
 (def ^{:dynamic true} *component* nil)
 ;; Whether the current vnode has just been created or not
@@ -190,14 +192,13 @@
           render-queue-fn (a/aget render-queue index-render-queue-fn)
           component-depth (a/aget vnode index-comp-data index-comp-data-depth)]
       (render-queue-fn #?(:cljs #js [render-queue (a/aget vnode index-comp-props) comp-fn vnode
-                                     component-depth false *post-render-fn*]
-                          :clj (doto (ArrayList. 7)
+                                     component-depth *post-render-fn*]
+                          :clj (doto (ArrayList. 6)
                                  (.add render-queue)
                                  (.add (a/aget vnode index-comp-props))
                                  (.add comp-fn)
                                  (.add vnode)
                                  (.add component-depth)
-                                 (.add false)
                                  (.add *post-render-fn*)))))))
 
 (defn parent-node [parent]
@@ -398,11 +399,12 @@
 (defn new-vnode-key [typeid element keymap key]
   (let [keymap (if (nil? keymap) (init-keymap #?(:cljs #js {} :clj (HashMap.))) keymap)
         vnode #?(:cljs #js [typeid *vnode* element
-                            nil nil nil nil nil nil key *new-flag*]
+                            nil nil nil nil nil nil nil key *new-flag*]
                  :clj (doto (ArrayList. 13)
                         (.add typeid)
                         (.add *vnode*)
                         (.add element)
+                        (.add nil)
                         (.add nil)
                         (.add nil)
                         (.add nil)
@@ -517,7 +519,9 @@
             (remove-vnode *vnode-to-remove*)
             (set! *vnode-to-remove* nil))
           (when (= tag "foreignObject")
-            (set! *svg-namespace* 0)))
+            (set! *svg-namespace* 0))
+          (a/aset *vnode* index-unmount will-unmount)
+          (a/aset *vnode* index-remove-hook remove-hook))
       (do
         (when prev
           (if-let [prev-key (a/aget prev index-key)]
@@ -527,10 +531,6 @@
         (when (a/aget *vnode* index-children-count)
           (a/aset *vnode* index-children-count 0))
         (clean-keymap *vnode*))))
-  (when (not= (a/aget *vnode* index-unmount) will-unmount)
-    (a/aset *vnode* index-unmount will-unmount))
-  (when (not= (a/aget *vnode* index-remove-hook) remove-hook)
-    (a/aset *vnode* index-remove-hook remove-hook))
   (set! *attrs-count* 0))
 
 (defn close-impl [did-mount did-update]
@@ -550,75 +550,61 @@
   (close-impl did-mount did-update)
   (set! *vnode* (a/aget *vnode* index-parent-vnode)))
 
-(def ^:const index-hooks-typeid 0)
-(def ^:const index-hooks-get-initial-state 1)
-(def ^:const index-hooks-will-receive-props 2)
-(def ^:const index-hooks-did-mount 3)
-(def ^:const index-hooks-did-update 4)
-(def ^:const index-hooks-will-unmount 5)
-(def ^:const index-hooks-remove 6)
-(def ^:const index-hooks-will-update 7)
-
-(defn open-comp [component-name typeid props? props comp-fn key hooks]
+(defn open-comp [component-name typeid props? props comp-fn key
+                 will-update will-unmount remove-hook
+                 will-receive-props get-initial-state]
   (assert (not (nil? *vnode*))
           (str "tried to render " component-name " outside of render loop"))
-  (let [hooks (when (and hooks (= typeid (a/aget hooks index-hooks-typeid))) hooks)
-        vnode-index (or (a/aget *vnode* index-children-count) 0)
-        will-unmount (when hooks (a/aget hooks index-hooks-will-unmount))
-        remove-hook (when hooks (a/aget hooks index-hooks-remove))
-        will-update (when hooks (a/aget hooks index-hooks-will-update))
-        will-receive-props (when hooks (a/aget hooks index-hooks-will-receive-props))
+  (let [vnode-index (or (a/aget *vnode* index-children-count) 0)
         prev (open-impl nil typeid key vnode-index)
         vnode *vnode*]
     (set! *props* props)
-    (when (not= (a/aget *vnode* index-unmount) will-unmount)
-      (a/aset *vnode* index-unmount will-unmount))
-    (when (not= (a/aget *vnode* index-remove-hook) remove-hook)
-      (a/aset *vnode* index-remove-hook remove-hook))
     (if (> *new-node* 0)
-      (let [state-ref #?(:cljs (ls/->LocalStateAtom
-                                nil nil on-state-change
-                                #js [*vnode* comp-fn *render-queue*])
-                         :clj (ls/->LocalStateAtom
-                               (java.util.concurrent.atomic.AtomicReference.)
-                               (clojure.lang.PersistentHashMap/EMPTY)
-                               on-state-change
-                               (doto (ArrayList.)
-                                 (.add *vnode*)
-                                 (.add comp-fn)
-                                 (.add *render-queue*))))
-            get-initial-state (and hooks (a/aget hooks index-hooks-get-initial-state))]
-        (a/aset *vnode* index-comp-props (if props? *props* no-props-flag))
-        (a/aset *vnode* index-comp-data
-                #?(:cljs #js[component-name state-ref *svg-namespace*
-                             vnode-index *component-depth* nil nil]
-                   :clj (doto (ArrayList. 6)
-                          (.add component-name)
-                          (.add state-ref)
-                          (.add *svg-namespace*)
-                          (.add vnode-index)
-                          (.add *component-depth*)
-                          (.add nil)
-                          (.add nil))))
-        ;; call will-unmount at the end to keep things consistent in case of an exception
-        ;; in will-unmount
-        (when prev
-          (if-let [prev-key (a/aget prev index-key)]
-            (remove-vnode-key prev)
-            (remove-vnode prev)))
-        (when *vnode-to-remove*
-          (remove-vnode *vnode-to-remove*)
-          (set! *vnode-to-remove* nil))
-        ;; call get-initial-state at the end to keep things consistent in case of an exception
-        ;; in get-initial-state
-        (if get-initial-state
-          (do (set! *vnode* nil)
-              (reset! state-ref (get-initial-state *props*))
-              (set! *vnode* vnode)
-              (set! *state* @state-ref)
-              (a/aset *vnode* index-comp-state *state*))
-          (do (set! *state* nil)
-              (a/aset *vnode* index-comp-state nil))))
+      (do
+        (a/aset *vnode* index-unmount will-unmount)
+        (a/aset *vnode* index-remove-hook remove-hook)
+        (let [state-ref #?(:cljs (ls/->LocalStateAtom
+                                  nil nil on-state-change
+                                  #js [*vnode* comp-fn *render-queue*])
+                           :clj (ls/->LocalStateAtom
+                                 (java.util.concurrent.atomic.AtomicReference.)
+                                 (clojure.lang.PersistentHashMap/EMPTY)
+                                 on-state-change
+                                 (doto (ArrayList.)
+                                   (.add *vnode*)
+                                   (.add comp-fn)
+                                   (.add *render-queue*))))]
+          (a/aset *vnode* index-comp-props (if props? *props* no-props-flag))
+          (a/aset *vnode* index-comp-data
+                  #?(:cljs #js[component-name state-ref *svg-namespace*
+                               vnode-index *component-depth* nil nil]
+                     :clj (doto (ArrayList. 6)
+                            (.add component-name)
+                            (.add state-ref)
+                            (.add *svg-namespace*)
+                            (.add vnode-index)
+                            (.add *component-depth*)
+                            (.add nil)
+                            (.add nil))))
+          ;; call will-unmount at the end to keep things consistent in case of an exception
+          ;; in will-unmount
+          (when prev
+            (if-let [prev-key (a/aget prev index-key)]
+              (remove-vnode-key prev)
+              (remove-vnode prev)))
+          (when *vnode-to-remove*
+            (remove-vnode *vnode-to-remove*)
+            (set! *vnode-to-remove* nil))
+          ;; call get-initial-state at the end to keep things consistent in case of an exception
+          ;; in get-initial-state
+          (if get-initial-state
+            (do (set! *vnode* nil)
+                (reset! state-ref (get-initial-state *props*))
+                (set! *vnode* vnode)
+                (set! *state* @state-ref)
+                (a/aset *vnode* index-comp-state *state*))
+            (do (set! *state* nil)
+                (a/aset *vnode* index-comp-state nil)))))
       (let [prev-props (comp-props *vnode*)
             prev-state (a/aget *vnode* index-comp-state)
             state-ref (a/aget *vnode* index-comp-data index-comp-data-state-ref)
@@ -647,12 +633,9 @@
     (set! *component* *vnode*)
     (set! *component-depth* (inc *component-depth*))))
 
-(defn close-comp [parent-component hooks]
+(defn close-comp [parent-component did-mount did-update]
   (when-not *skip*
-    (if (and hooks (= (a/aget *component* index-typeid) (a/aget hooks index-hooks-typeid)))
-      (close-impl (a/aget hooks index-hooks-did-mount)
-                  (a/aget hooks index-hooks-did-update))
-      (close-impl nil nil)))
+    (close-impl did-mount did-update))
   (set! *component* parent-component)
   (set! *component-depth* (dec *component-depth*))
   (set! *vnode* (a/aget *vnode* index-parent-vnode))
@@ -661,61 +644,8 @@
     (set! *state* (a/aget parent-component index-comp-state)))
   (set! *skip* false))
 
-#_(defn- attr-impl [vnode ns key val set-fn]
-  (let [prev-attrs (or (a/aget vnode index-attrs) #?(:cljs #js [] :clj (ArrayList.)))
-        prev-val (a/aget prev-attrs *attrs-count*)
-        prev-node (a/aget vnode index-node)]
-    (when (nil? (a/aget vnode index-attrs))
-      (a/aset vnode index-attrs prev-attrs))
-    (when (not= prev-val val)
-      (a/aset prev-attrs *attrs-count* val)
-      (set-fn prev-node ns key val))
-    (set! *attrs-count* (inc *attrs-count*))))
-
-#_(defn- handle-event-handlers [context on-type attrs attrs-index key handler f]
-  (let [node (a/aget *vnode* index-node)
-        #_handle-event-handler-fn #_(o/get context (if (identical? "listener" on-type)
-                                                 "handle-listener-fn"
-                                                 "handle-event-handler-fn" ))]
-    (handle-event-handler context on-type node key (a/aget attrs attrs-index) handler)
-    (a/aset attrs attrs-index handler)
-    (a/aset attrs (inc attrs-index) f)))
-
-;; on-type is useful to be able to register different type of event handlers (such as property
-;; change listeners of javafx)
-#_(defn- on-impl [context on-type key f param1 param2 param3 param-count]
-  (let [prev-attrs (or (a/aget *vnode* index-attrs) #?(:cljs #js [] :clj (ArrayList.)))
-        prev-f (a/aget prev-attrs (inc *attrs-count*))
-        state-ref (a/aget *component* index-comp-data index-comp-data-state-ref)]
-    (when (nil? (a/aget *vnode* index-attrs))
-      (a/aset *vnode* index-attrs prev-attrs))
-    (cond (and (= 0 param-count) (not= prev-f f))
-          (let [handler (make-handler-0 context on-type f state-ref)]
-            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f))
-          (and (= 1 param-count) (or (not= prev-f f)
-                                     (not= param1 (a/aget prev-attrs (+ *attrs-count* 2)))))
-          (let [handler (make-handler-1 context on-type f state-ref param1)]
-            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f)
-            (a/aset prev-attrs (+ *attrs-count* 2) param1))
-          (and (= 2 param-count) (or (not= prev-f f)
-                                     (not= param1 (a/aget prev-attrs (+ *attrs-count* 2)))
-                                     (not= param2 (a/aget prev-attrs (+ *attrs-count* 3)))))
-          (let [handler (make-handler-2 context on-type f state-ref param1 param2)]
-            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f)
-            (a/aset prev-attrs (+ *attrs-count* 2) param1)
-            (a/aset prev-attrs (+ *attrs-count* 3) param2))
-          (and (= 3 param-count) (or (not= prev-f f)
-                                     (not= param1 (a/aget prev-attrs (+ *attrs-count* 2)))
-                                     (not= param2 (a/aget prev-attrs (+ *attrs-count* 3)))
-                                     (not= param3 (a/aget prev-attrs (+ *attrs-count* 4)))))
-          (let [handler (make-handler-3 context on-type f state-ref param1 param2 param3)]
-            (handle-event-handlers context on-type prev-attrs *attrs-count* key handler f)
-            (a/aset prev-attrs (+ *attrs-count* 2) param1)
-            (a/aset prev-attrs (+ *attrs-count* 3) param2)
-            (a/aset prev-attrs (+ *attrs-count* 4) param3)))
-    (set! *attrs-count* (+ *attrs-count* 2 param-count))))
-
-;; compare-handlers-x sets this var to the previous handler in order for handle-event-handler to use it
+;; compare-handlers-x sets this var to the previous handler in order for handle-event-handler
+;; to use it
 (def ^:dynamic *handlers-prev* nil)
 ;; compare-handlers-x sets this var to the state-ref in order for make-handler-x to use it
 (def ^:dynamic *handlers-state-ref* nil)
@@ -924,9 +854,6 @@
                   (.-component-data)
                   (a/aget 2))))
 
-;; store hooks for components
-(defonce comp-hooks #?(:cljs (js-obj) :clj (java.util.concurrent.ConcurrentHashMap.)))
-
 (defonce vtree-ids (atom 0))
 ;; Roots is only set on the rendering thread
 (defonce roots #?(:cljs #js {} :clj (HashMap.)))
@@ -951,7 +878,7 @@
 ;; the exception happens on a keyed vnode, because the next patching processes will try to
 ;; clean the keyed node (and fail)
 
-;; comp-hooks stores the component-id of its target component. When redefining a component, its hooks are lost
+;; the vnode when it is created. willupdate is consistent with didupdate during a render pass.
 
 ;; synchronous rendering is mainly useful for testing. Synchronous rendering cannot be a parameter to patch since local state updates would not be impacted
 
@@ -961,8 +888,5 @@
 
 ;; list-view, tree-view ... cell factories are not used because it is hard to support with stateful vtrees / lifecycle hooks. Displaying a big list requires paging/lazy loading anyway
 
-;; setTimeout / setInterval -> store the timers with a key in an object (must be called on the render loop thread so can be mutable) in the vnode. Cancel the timer on demand (using the key) or when the component unmounts.
-;; hooks-map -> Working with the Clojure :elide-meta option?
-;; native arithmetic
 ;; Add a test for the first case of duplicate keys
-
+;; check ScenicView

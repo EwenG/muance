@@ -1,5 +1,5 @@
 (ns muance.core
-  (:refer-clojure :exclude [remove key])
+  (:refer-clojure :exclude [remove key get set])
   (:require [muance.diff :as diff]
             [muance.vtree :as vtree]
             [muance.objects :as o]
@@ -25,7 +25,7 @@
      (cond (symbol? params) [params params]
            (vector? params) (let [as-index (.indexOf ^java.util.List params :as)
                                   props-sym (if (not= -1 as-index)
-                                              (get params (inc as-index))
+                                              (clojure.core/get params (inc as-index))
                                               (gensym "props"))
                                   params (if (= -1 as-index) (conj params :as props-sym) params)]
                               [params props-sym])
@@ -45,7 +45,7 @@
 #?(:clj
    (defmacro defcomp
      "Define a Muance stateful component. A Muance component takes zero or one argument."
-     [name docstring-or-params & params-body]
+     [name docstring-or-hooks-or-params & body]
      (swap! comp-typeid dec-comp-typeid)
      (let [env-ns (if (cljs-env? &env)
                     (do
@@ -53,15 +53,33 @@
                       @(resolve 'cljs.analyzer/*cljs-ns*))
                     *ns*)
            typeid @comp-typeid
-           name (if (string? docstring-or-params)
-                  (vary-meta name assoc :doc docstring-or-params)
+           name (if (string? docstring-or-hooks-or-params)
+                  (vary-meta name assoc :doc docstring-or-hooks-or-params)
                   name)
            name (vary-meta name assoc ::component typeid)
-           params (if (string? docstring-or-params) (first params-body) docstring-or-params)
+           hooks-or-params (if (string? docstring-or-hooks-or-params)
+                             (first body)
+                             docstring-or-hooks-or-params)
+           body (if (string? docstring-or-hooks-or-params)
+                  (rest body)
+                  body)
+           hooks (when (= ::hooks hooks-or-params)
+                   (first body))
+           _ (when hooks (assert (map? hooks)))
+           {will-update :will-update will-unmount :will-unmount
+            remove-hook :remove-hook
+            did-mount :did-mount did-update :did-update
+            get-initial-state :get-initial-state
+            will-receive-props :will-receive-props} hooks
+           params (if (= ::hooks hooks-or-params)
+                    (second body)
+                    hooks-or-params)
+           body (if (= ::hooks hooks-or-params)
+                  (drop 2 body)
+                  body)
            _ (assert (<= (count params) 1)
                      (str env-ns "/" name " must take 0 or 1 parameter"))
            [params-with-props props-sym] (params-with-props (first params))
-           body (if (string? docstring-or-params) (rest params-body) params-body)
            key-sym (gensym "key")]
        `(defn ~name
           ~(if params-with-props
@@ -73,72 +91,18 @@
            (~(if (cljs-env? &env)
                'cljs.core/let
                'clojure.core/let)
-            [parent-component# muance.diff/*component*
-                           hooks# (o/get muance.diff/comp-hooks
-                                         ~(str env-ns "/" name))]
-             (diff/open-comp ~(str env-ns "/" name)
-                             ~typeid ~(boolean params-with-props)
-                             ~(when params-with-props props-sym)
-                             (var ~name) ~key-sym hooks#)
+            [parent-component# muance.diff/*component*]
+            (diff/open-comp ~(str env-ns "/" name)
+                            ~typeid ~(boolean params-with-props)
+                            ~(when params-with-props props-sym)
+                            (var ~name) ~key-sym
+                            ~will-update ~will-unmount ~remove-hook
+                            ~will-receive-props ~get-initial-state)
             (~(if (cljs-env? &env)
                 'cljs.core/when-not
                 'clojure.core/when-not) muance.diff/*skip*
              ~@body)
-            (diff/close-comp parent-component# hooks#)))))))
-
-#?(:clj
-   (defmacro hooks
-     "Attaches a set of lifecycle hooks to a Muance component. hooks-map must be a literal map of
-  lifecycle hooks."
-     [component hooks-map]
-     (let [not-a-comp-msg "muance.core/hooks first parameter must be a component"
-           _ (assert (symbol? component) not-a-comp-msg)]
-       (if (cljs-env? &env)
-         (do
-           (require 'muance.dom)
-           (require 'cljs.env)
-           (let [resolved ((resolve 'muance.dom/cljs-resolve) &env component)
-                 comp-ns (and resolved (symbol (namespace resolved)))
-                 comp-sym (and resolved (symbol (name resolved)))
-                 _ (assert (and comp-ns comp-sym) not-a-comp-msg)
-                 var-map (get-in @(resolve 'cljs.env/*compiler*)
-                                 [:cljs.analyzer/namespaces comp-ns :defs comp-sym])
-                 comp-id (get-in var-map [:meta ::component])]
-             (assert comp-id not-a-comp-msg)
-             (assert (map? hooks-map))
-             (let [{will-update :will-update will-unmount :will-unmount
-                    remove-hook :remove-hook
-                    did-mount :did-mount did-update :did-update
-                    will-receive-props :will-receive-props
-                    get-initial-state :get-initial-state :as attrs} hooks-map]
-               `(o/set
-                 muance.diff/comp-hooks
-                 ~(str comp-ns "/" comp-sym)
-                 (cljs.core/array ~comp-id
-                                  ~get-initial-state ~will-receive-props
-                                  ~did-mount ~did-update ~will-unmount
-                                  ~remove-hook ~will-update)))))
-         (let [resolved (resolve component)
-               comp-ns (and resolved (ns-name (.-ns resolved)))
-               comp-sym (and resolved (.-sym resolved))
-               _ (assert (and comp-ns comp-sym) not-a-comp-msg)
-               comp-id (get (meta resolved) ::component)]
-           (assert comp-id not-a-comp-msg)
-           (assert (map? hooks-map))
-           (let [{will-update :will-update will-unmount :will-unmount
-                  remove-hook :remove-hook
-                  did-mount :did-mount did-update :did-update
-                  will-receive-props :will-receive-props
-                  get-initial-state :get-initial-state :as attrs} hooks-map]
-             `(o/set
-               muance.diff/comp-hooks
-               ~(str comp-ns "/" comp-sym)
-               (doto (java.util.ArrayList.)
-                 (.add ~comp-id)
-                 (.add ~get-initial-state)
-                 (.add ~will-receive-props)
-                 (.add ~did-mount) (.add ~did-update) (.add ~will-unmount)
-                 (.add ~remove-hook) (.add ~will-update)))))))))
+            (diff/close-comp parent-component# ~did-mount ~did-update)))))))
 
 (defprotocol VTree
   (remove [this]
@@ -186,19 +150,46 @@
      ~@body))
 
 (defn nodes
-  "Return a vector of all the real nodes associated with vnode."
+  "Return a vector of all the real nodes associated with the current virtual node/component."
   []
   (assert (not (nil? diff/*vnode*))
           (str "muance.core/nodes was called outside of render loop"))
   (diff/nodes diff/*vnode*))
 
 (defn node
-  "Return the real nodes associated with vnode. Returns the first children of vnode if vnode is
-  a component and is associated with multiple real nodes."
+  "Return the real node associated with the current virtual node/component. If the current component has multiple real nodes, then only the first is returned."
   []
   (assert (not (nil? diff/*vnode*))
           (str "muance.core/node was called outside of render loop"))
   (diff/node diff/*vnode*))
+
+(defn parent-node
+  "Return the real node associated with the parent of the current virtual node/component."
+  []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/parent-node was called outside of render loop"))
+  (when-let [p-vnode (a/aget diff/*vnode* diff/index-parent-vnode)]
+    (diff/parent-node p-vnode)))
+
+(defn get
+  "Get a value from the ones set on the current node/component by the muance.core/set function. This function is intended to be used in lifecycle hooks."
+  [k]
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/get was called outside of render loop"))
+  (when-let [user-data (a/aget diff/*vnode* diff/index-user-data)]
+    (o/get user-data k)))
+
+(defn set
+  "Store a value on the current node/component. This function is intended to be used in lifecycle hooks. The stored value can be retrieved using muance.core/get."
+  [k v]
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/set was called outside of render loop"))
+  (let [user-data (a/aget diff/*vnode* diff/index-user-data)]
+    (if (nil? user-data)
+      (let [user-data #?(:cljs #js {} :clj (java.util.HashMap.))]
+        (o/set user-data k v)
+        (a/aset diff/*vnode* diff/index-user-data user-data))
+      (o/set user-data k v))))
 
 ;;;;
 
@@ -210,14 +201,13 @@
    (let [render-queue (vtree/render-queue vtree)
          render-queue-fn (a/aget render-queue diff/index-render-queue-fn)]
      (render-queue-fn #?(:cljs #js [(vtree/render-queue vtree) props component
-                                    (vtree/vnode vtree) -1 false diff/*post-render-fn*]
+                                    (vtree/vnode vtree) -1 diff/*post-render-fn*]
                          :clj (doto (ArrayList. 6)
                                 (.add (vtree/render-queue vtree))
                                 (.add props)
                                 (.add component)
                                 (.add (vtree/vnode vtree))
                                 (.add -1)
-                                (.add (vtree/synchronous? vtree))
                                 (.add diff/*post-render-fn*)))))))
 
 (defn state []
