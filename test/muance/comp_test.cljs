@@ -2,7 +2,7 @@
   (:require [cljs.pprint :refer [pprint pp]]
             [cljs.test :refer [deftest testing is run-tests]]
             [goog.object :as o]
-            [muance.core :as m :include-macros true]
+            [muance.core :as m]
             [muance.dom :as dom]
             [muance.diff :as diff]
             [muance.print :as mprint]
@@ -32,7 +32,7 @@
 (deftest static-comp []
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
-  (m/patch @vtree comp-props-f 50))
+  (m/patch @vtree comp-props-f 53))
 
 
 
@@ -80,7 +80,7 @@
 (deftest comp-keyed []
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
-  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 4) :props "comp-props5"})
+  (m/patch @vtree comp-keyed-f {:keys (get keys-vec 2) :props "comp-props6"})
   )
 
 
@@ -95,55 +95,55 @@
 
 (defn set-key-prop [type]
   (fn []
-    (let [nodes (m/dom-nodes (m/vnode))]
+    (let [nodes (m/nodes)]
       (doseq [node nodes]
-        (let [k (m/key (m/vnode))]
+        (let [k (m/key)]
           (o/set node "keyedKey" k)
           (o/set node "keyedType" type))))))
 
-(m/defcomp comp-keyed-generative-no-child [])
+(m/defcomp comp-keyed-generative-no-child
+  ::m/hooks {:did-mount (set-key-prop 1)
+             :did-update (set-key-prop 1)}
+  [])
 
-(m/hooks comp-keyed-generative-no-child {:did-mount (set-key-prop 1)
-                                         :did-update (set-key-prop 1)})
-
-(m/defcomp comp-keyed-generative-child [k]
+(m/defcomp comp-keyed-generative-child
+  ::m/hooks {:did-mount (set-key-prop 2)
+             :did-update (set-key-prop 2)}
+  [k]
   (h/div :class k))
 
-(m/hooks comp-keyed-generative-child {:did-mount (set-key-prop 2)
-                                      :did-update (set-key-prop 2)})
-
-(m/defcomp comp-keyed-generative-children [k]
+(m/defcomp comp-keyed-generative-children
+  ::m/hooks {:did-mount (set-key-prop 3)
+             :did-update (set-key-prop 3)}
+  [k]
   (h/div :class k)
   (h/div :class k))
 
-(m/hooks comp-keyed-generative-children {:did-mount (set-key-prop 3)
-                                         :did-update (set-key-prop 3)})
-
 (m/defcomp comp-keyed-generative-f [keys-seq]
   (h/div :class ["reorder"]
-   (doseq [[type k] keys-seq]
-     (cond (= 0 type)
-           (if k
-             (h/div :class k
-                    ::m/key k
-                    ::m/hooks {:did-mount (set-key-prop 0)
-                               :did-update (set-key-prop 0)})
-             (h/div ::m/hooks {:did-mount (set-key-prop 0)
-                               :did-update (set-key-prop 0)}))
-           (= 1 type)
-           (if k
-             (comp-keyed-generative-no-child k)
-             (comp-keyed-generative-no-child))
-           (= 2 type)
-           (if k
-             (comp-keyed-generative-child k k)
-             (comp-keyed-generative-child nil))
-           (= 3 type)
-           (if k
-             (comp-keyed-generative-children k k)
-             (comp-keyed-generative-children nil))
-           (= 4 type)
-           (dom/text "ee")))))
+         (doseq [[type k] keys-seq]
+           (cond (= 0 type)
+                 (if k
+                   (h/div :class k
+                          ::m/key k
+                          ::m/hooks {:did-mount (set-key-prop 0)
+                                     :did-update (set-key-prop 0)})
+                   (h/div ::m/hooks {:did-mount (set-key-prop 0)
+                                     :did-update (set-key-prop 0)}))
+                 (= 1 type)
+                 (if k
+                   (comp-keyed-generative-no-child k)
+                   (comp-keyed-generative-no-child))
+                 (= 2 type)
+                 (if k
+                   (comp-keyed-generative-child k k)
+                   (comp-keyed-generative-child nil))
+                 (= 3 type)
+                 (if k
+                   (comp-keyed-generative-children k k)
+                   (comp-keyed-generative-children nil))
+                 (= 4 type)
+                 (dom/text "ee")))))
 
 (def keyed-generator
   (gen/list
@@ -168,7 +168,7 @@
 
 (def comp-keyed-generative
   (prop/for-all [keyed-seq keyed-generator]
-                (swap! vtree utils/new-vtree false)
+                (swap! vtree utils/new-vtree {:synchronous? true})
                 (m/append-child (utils/new-root) @vtree)
                 (loop [[keys-seq & rest-keyed] keyed-seq]
                   (if keys-seq
@@ -183,6 +183,18 @@
                     true))))
 
 (comment
+  (do
+    (swap! vtree utils/new-vtree {:synchronous? true})
+    (m/append-child (utils/new-root) @vtree)
+    (m/patch @vtree comp-keyed-generative-f '([2 nil]))
+    #_(m/patch @vtree comp-keyed-generative-f '())
+    (let [reorder-node (.querySelector js/document ".reorder")
+          nodes (array-seq (.-childNodes reorder-node) 0)
+          result (map keyed-result nodes)]
+      result))
+  )
+
+(comment
   (tc/quick-check 100 comp-keyed-generative)
   )
 
@@ -195,14 +207,45 @@
                 [-1 1]
                 [0]])
 
-(m/defcomp comp-attributes-props [props]
+(m/defcomp comp-attributes-props
+  ::m/hooks {:did-mount (fn [props state]
+                          (prn "did-mount")
+                          (prn :props props)
+                          (prn :state state)
+                          (prn :component-name (m/component-name))
+                          (prn :nodes (m/nodes)))
+             :will-update (fn [props state]
+                            (prn "will-update")
+                            (prn :props props)
+                            (prn :state state))
+             :did-update (fn [props state]
+                           (prn "did-update")
+                           (prn :props props)
+                           (prn :state state))
+             :will-unmount (fn [props state]
+                             (prn "will-unmount")
+                             (prn :props props)
+                             (prn :state state)
+                             (prn :component-name (m/component-name))
+                             (prn :nodes (m/nodes)))
+             :get-initial-state (fn [props]
+                                  (prn "get-initial-state")
+                                  (prn :props props)
+                                  "initial-state")
+             :will-receive-props (fn [prev-props props state-ref]
+                                   (reset! state-ref "new-state")
+                                   (prn "will-receive-props")
+                                   (prn :prev-props prev-props)
+                                   (prn :props props)
+                                   (prn :state-ref state-ref))}
+  [props]
   (h/p :class "props"
        ::m/hooks {:did-mount (fn [props state]
                                (prn "did-mount-inner")
                                (prn :props props)
                                (prn :state state)
-                               (prn :component-name (m/component-name (m/vnode)))
-                               (prn :node (m/dom-node (m/vnode))))
+                               (prn :component-name (m/component-name))
+                               (prn :node (m/node)))
                   :will-update (fn [props state]
                                  (prn "will-update-inner")
                                  (prn :props props)
@@ -215,42 +258,9 @@
                                   (prn "will-unmount-inner")
                                   (prn :props props)
                                   (prn :state state)
-                                  (prn :component-name (m/component-name (m/vnode)))
-                                  (prn :node (m/dom-node (m/vnode)))
-                                  )}
+                                  (prn :component-name (m/component-name))
+                                  (prn :node (m/node)))}
        (dom/text props)))
-
-(m/hooks comp-attributes-props
-         {:did-mount (fn [props state]
-                       (prn "did-mount")
-                       (prn :props props)
-                       (prn :state state)
-                       (prn :component-name (m/component-name (m/vnode)))
-                       (prn :nodes (m/dom-nodes (m/vnode))))
-          :will-update (fn [props state]
-                         (prn "will-update")
-                         (prn :props props)
-                         (prn :state state))
-          :did-update (fn [props state]
-                        (prn "did-update")
-                        (prn :props props)
-                        (prn :state state))
-          :will-unmount (fn [props state]
-                          (prn "will-unmount")
-                          (prn :props props)
-                          (prn :state state)
-                          (prn :component-name (m/component-name (m/vnode)))
-                          (prn :nodes (m/dom-nodes (m/vnode))))
-          :get-initial-state (fn [props]
-                               (prn "get-initial-state")
-                               (prn :props props)
-                               "initial-state")
-          :will-receive-props (fn [prev-props props state-ref]
-                                (reset! state-ref "new-state")
-                                (prn "will-receive-props")
-                                (prn :prev-props prev-props)
-                                (prn :props props)
-                                (prn :state-ref state-ref))})
 
 (m/defcomp comp-attributes-no-props []
   (h/p :class "no-props"))
@@ -268,7 +278,7 @@
 (deftest comp-attributes []
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
-  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 2) :props "comp-props7"})
+  (m/patch @vtree comp-attributes-f {:keys (get keys-vec2 0) :props "comp-props2"})
   )
 
 
@@ -283,7 +293,19 @@
          ::m/on [:click render-queue-click]
          (dom/text props)))
 
-(m/defcomp render-queue-depth1 [props]
+(m/defcomp render-queue-depth1
+  ::m/hooks {:get-initial-state (fn [props] 0)
+             :will-receive-props (fn [prev-props props state]
+                                   (reset! state (:depth1 props)))
+             :did-mount (fn [props state]
+                          (m/set :interval-id (dom/set-interval #(do (prn "inc")
+                                                                     (swap! % inc)) 1000)))
+             :will-unmount (fn [props state]
+                             (let [interval-id (m/get :interval-id)]
+                               ;; throws an exception
+                               #_(.clearInterval interval-id)
+                               (.clearInterval js/window interval-id)))}
+  [props]
   (h/p :class (m/state)
        :id props
        :style {:width "500px" :height "500px" :border "1px solid black"}
@@ -297,27 +319,14 @@
 
 (m/defcomp render-queue-depth0 [props]
   (h/div (when (:display props) (render-queue-depth1 props))
-         (render-queue-depth1*)))
+         (render-queue-depth1* 1)))
 
-(m/hooks render-queue-depth1
-         {:get-initial-state (fn [props] 0)
-          :will-receive-props (fn [prev-props props state]
-                                (reset! state (:depth1 props)))
-          :did-mount (fn [props state]
-                       (let [node (m/dom-node (m/vnode))]
-                         (o/set node (m/component-name (m/vnode))
-                                (dom/set-interval (m/vnode) #(swap! % inc) 1000))))
-          :will-unmount (fn [props state]
-                          (let [node (m/dom-node (m/vnode))
-                                interval-id (o/get node (m/component-name (m/vnode)))]
-                            ;; throws an exception
-                            #_(.clearInterval interval-id)
-                            (.clearInterval js/window interval-id)))})
+
 
 (deftest render-queue []
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
-  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth3-props" :display true}))
+  (m/patch @vtree render-queue-depth0 {:depth1 42 :depth2 "depth2-props" :display false}))
 
 
 
@@ -345,26 +354,27 @@
 (defn exception-click-handler [e state-ref]
   (swap! state-ref inc))
 
-(m/defcomp comp-exception-keyed [b]
-  (let [comp-k (m/key (m/vnode))]
+(m/defcomp comp-exception-keyed
+  ::m/hooks {:will-update (fn [b]
+                            (prn (m/key))
+                            (when (= (m/key) "3")
+                              #_(throw (js/Error. "err"))))
+             :will-unmount (fn [b]
+                             (when (= (m/key) "3")
+                               #_(throw (js/Error. "err"))))}
+  [b]
+  (let [comp-k (m/key)]
     (h/p
      :style {:width "500px" :height "500px"}
      ::m/on [:click exception-click-handler]
      (dom/text comp-k " " (m/state)))))
 
-(m/hooks comp-exception-keyed {:will-update (fn [b]
-                                              (when (= (m/key (m/vnode)) "3")
-                                                #_(throw (js/Error. "err"))))
-                               :will-unmount (fn [b]
-                                               (when (= (m/key (m/vnode)) "3")
-                                                 #_(throw (js/Error. "err"))))})
-
 #_(m/defcomp comp-exception-f [b]
-  (if b
-    (do (comp-exception-keyed 1 nil) (comp-exception-keyed 2 nil)
-        (comp-exception-keyed 3 b))
-    (do (comp-exception-keyed 1 nil) (comp-exception-keyed 4 nil)
-        (comp-exception-keyed 3 b) (comp-exception-keyed 2 nil))))
+    (if b
+      (do (comp-exception-keyed 1 nil) (comp-exception-keyed 2 nil)
+          (comp-exception-keyed 3 b))
+      (do (comp-exception-keyed 1 nil) (comp-exception-keyed 4 nil)
+          (comp-exception-keyed 3 b) (comp-exception-keyed 2 nil))))
 
 (m/defcomp comp-exception-f [b]
   (if b
@@ -376,18 +386,17 @@
 (deftest comp-exception []
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
-  (m/patch @vtree comp-exception-f true))
+  (m/patch @vtree comp-exception-f false))
 
 
 
 (m/defcomp comp-prevent-node-removal-f [b]
   (if b
     (h/p
-     ::m/hooks {:remove-hook (fn [rem-node] (dom/remove-node rem-node))}
+     #_::m/hooks #_{:remove-hook (fn [rem-node] (dom/remove-node rem-node))}
      (h/div
       ::m/hooks {:remove-hook (fn [rem-node]
-                                (dom/set-timeout (m/vnode)
-                                                 (fn [state-ref] (dom/remove-node rem-node))
+                                (dom/set-timeout (fn [state-ref] (dom/remove-node rem-node))
                                                  3000))}))
     (h/p)))
 
@@ -395,4 +404,3 @@
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-prevent-node-removal-f true))
-
