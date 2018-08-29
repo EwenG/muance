@@ -2,6 +2,7 @@
   (:require [muance.javafx :as javafx]))
 
 (def javafx-nodes #{{:name 'text :tag 'javafx.scene.text.Text}
+                    {:name 'pane :tag 'javafx.scene.layout.Pane}
                     {:name 'stack-pane :tag 'javafx.scene.layout.StackPane}
                     {:name 'scroll-pane :tag 'javafx.scene.control.ScrollPane
                      :children-getter 'contentProperty}
@@ -23,7 +24,12 @@
                     {:name 'label :tag 'javafx.scene.control.Label}
                     {:name 'checkbox :tag 'javafx.scene.control.CheckBox}
                     {:name 'anchor-pane :tag 'javafx.scene.layout.AnchorPane}
-                    {:name 'toggle-button :tag 'javafx.scene.control.ToggleButton}})
+                    {:name 'toggle-button :tag 'javafx.scene.control.ToggleButton}
+                    {:name 'tab-pane :tag 'javafx.scene.control.TabPane
+                     :children-getter 'getTabs}
+                    {:name 'tab :tag 'javafx.scene.control.Tab
+                     :children-getter 'contentProperty}
+                    {:name 'circle :tag 'javafx.scene.shape.Circle}})
 
 (def element-macros javafx-nodes)
 
