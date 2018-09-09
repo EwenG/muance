@@ -894,7 +894,6 @@
 ;; timers for javafx
 ;; check ScenicView
 ;; check exception in will-unmount
-;; check properties with getter isBlaBla... instead of getBlaBla 
-;; type hint setStyle for all styleable implementing classes
-;; Node / PopupControl / MenuItem / Tab / TableColumnBase
+;; check properties with getter isBlaBla... instead of getBlaBla
+
 
