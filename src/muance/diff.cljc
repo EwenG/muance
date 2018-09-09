@@ -505,7 +505,7 @@
             (set! *vnode* vnode)
             prev))))))
 
-(defn open [tag typeid key will-update will-unmount remove-hook]
+(defn open [tag typeid key will-update will-unmount will-mount remove-hook]
   (assert (not (nil? *component*)) (str "tag " tag " was called outside of render loop"))
   (let [prev (open-impl tag (or typeid tag) key
                         (or (a/aget *vnode* index-children-count) 0))]
@@ -520,6 +520,7 @@
             (set! *vnode-to-remove* nil))
           (when (= tag "foreignObject")
             (set! *svg-namespace* 0))
+          (when will-mount (will-mount *props* *state*))
           (a/aset *vnode* index-unmount will-unmount)
           (a/aset *vnode* index-remove-hook remove-hook))
       (do
@@ -552,7 +553,7 @@
 
 (defn open-comp [component-name typeid props? props comp-fn key
                  will-update will-unmount remove-hook
-                 will-receive-props get-initial-state]
+                 will-receive-props get-initial-state will-mount]
   (assert (not (nil? *vnode*))
           (str "tried to render " component-name " outside of render loop"))
   (let [vnode-index (or (a/aget *vnode* index-children-count) 0)
@@ -595,8 +596,8 @@
           (when *vnode-to-remove*
             (remove-vnode *vnode-to-remove*)
             (set! *vnode-to-remove* nil))
-          ;; call get-initial-state at the end to keep things consistent in case of an exception
-          ;; in get-initial-state
+          ;; call get-initial-state and will-mount at the end to keep things consistent
+          ;; in case of an exception in get-initial-state or will-mount
           (if get-initial-state
             (do (set! *vnode* nil)
                 (reset! state-ref (get-initial-state *props*))
@@ -604,7 +605,8 @@
                 (set! *state* @state-ref)
                 (a/aset *vnode* index-comp-state *state*))
             (do (set! *state* nil)
-                (a/aset *vnode* index-comp-state nil)))))
+                (a/aset *vnode* index-comp-state nil)))
+          (when will-mount (will-mount *props* *state*))))
       (let [prev-props (comp-props *vnode*)
             prev-state (a/aget *vnode* index-comp-state)
             state-ref (a/aget *vnode* index-comp-data index-comp-data-state-ref)
@@ -880,7 +882,7 @@
 
 ;; the vnode when it is created. willupdate is consistent with didupdate during a render pass.
 
-;; synchronous rendering is mainly useful for testing. Synchronous rendering cannot be a parameter to patch since local state updates would not be impacted
+;; synchronous rendering is mainly useful for testing. It is also useful to render in javafx tree-cells/list-cells. Synchronous rendering cannot be a parameter to patch since local state updates would not be impacted.
 
 ;; global-post-render-hook cannot be a parameter to patch since local state updates would not be impacted
 
@@ -889,4 +891,10 @@
 ;; list-view, tree-view ... cell factories are not used because it is hard to support with stateful vtrees / lifecycle hooks. Displaying a big list requires paging/lazy loading anyway
 
 ;; Add a test for the first case of duplicate keys
+;; timers for javafx
 ;; check ScenicView
+;; check exception in will-unmount
+;; check properties with getter isBlaBla... instead of getBlaBla 
+;; type hint setStyle for all styleable implementing classes
+;; Node / PopupControl / MenuItem / Tab / TableColumnBase
+
