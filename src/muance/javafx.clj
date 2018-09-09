@@ -376,21 +376,40 @@
     (a/forEach a #(.append sb %))
     (str sb)))
 
-(defn- style [key val]
+(defprotocol Styleable)
+
+(extend-protocol Styleable
+  javafx.scene.Node
+  (set-style [this style]
+    (.setStyle this style))
+  javafx.scene.control.PopupControl
+  (set-style [this style]
+    (.setStyle this style))
+  javafx.scene.control.MenuItem
+  (set-style [this style]
+    (.setStyle this style))
+  javafx.scene.control.Tab
+  (set-style [this style]
+    (.setStyle this style))
+  javafx.scene.control.TableColumnBase
+  (set-style [this style]
+    (.setStyle this style)))
+
+(defn- style [val]
   `(let [val# ~val]
      (style-remove-nils! val# 0 (a/length val#))
      (let [val# (join-strings val#)]
        (when (diff/compare-attrs val#)
-         (. ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)
+         (.setStyle (a/aget diff/*vnode* diff/index-node) val#)
          (diff/set-attr val#)))
      (diff/inc-attrs 1)))
 
-(defn- style-static [key val]
+(defn- style-static [val]
   `(let [val# ~val]
      (style-remove-nils! val# 0 (a/length val#))
      (let [val# (join-strings val#)]
        (when (and (> diff/*new-node* 0) (not (nil? val#)))
-         (. ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node) ~(symbol key) val#)))))
+         (.setStyle (a/aget diff/*vnode* diff/index-node) val#)))))
 
 (defn- input-value [tag val]
   (let [node-sym (with-meta (gensym "node") {:tag tag})]
@@ -420,8 +439,8 @@
                                  property-name (:name (as-property-setter tag :style))]
                              (assert property-name (str "style is not a property of " tag))
                              (if (every? (partial static? env) style-arr)
-                               (conj calls (style-static property-name style-call))
-                               (conj calls (style property-name style-call))))
+                               (conj calls (style-static style-call))
+                               (conj calls (style style-call))))
               (= k ::m/on) (into calls (on-calls env tag v))
               (= k ::m/listen) (into calls (listen-calls env tag v))
               (and (isa? (Class/forName (str tag))
