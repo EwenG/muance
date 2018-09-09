@@ -8,8 +8,7 @@
             [muance.context :as context]
             [muance.attributes :as attributes]
             [muance.animation-timer :as animation-timer]
-            [clojure.tools.logging :as log]
-            [muance.list-cell :as list-cell])
+            [clojure.tools.logging :as log])
   (:import [java.util ArrayList Collections]
            [javafx.collections ObservableList]
            [javafx.beans.property ObjectProperty]
@@ -19,7 +18,7 @@
            [javafx.stage Stage]
            [javafx.beans.property ObjectProperty]
            [java.util.concurrent SynchronousQueue]
-           [muance.javafx AnimationTimer FrozenRenderQueue ListCell]))
+           [muance.javafx AnimationTimer FrozenRenderQueue]))
 
 (defonce ^Stage stage (init/start-app))
 
@@ -427,7 +426,7 @@
               (= k ::m/listen) (into calls (listen-calls env tag v))
               (and (isa? (Class/forName (str tag))
                          ;; Dynamically load the class to avoid class loading / javafx init issues
-                         (Class/forName "javafx.scene.control.TextField"))
+                         javafx.scene.control.TextField)
                    (= (name k) "text"))
               (conj calls (if (static? env v)
                             (prop-static tag (:name (as-property-setter tag k)) v)
@@ -451,14 +450,15 @@
         {key ::m/key
          {will-update :will-update will-unmount :will-unmount
           remove-hook :remove-hook
-          did-mount :did-mount did-update :did-update} ::m/hooks
+          did-mount :did-mount did-update :did-update
+          will-mount :will-mount} ::m/hooks
          :as attrs} (attributes/attributes body)
         _ (attributes/validate-attributes attrs)
         body (attributes/body-without-attributes body attrs)]
     (assert (or (nil? max-children) (<= (count body) max-children))
             (str "Too many children for " tag))
     `(do
-       (muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~remove-hook)
+       (muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~will-mount ~remove-hook)
        ~@(attribute-calls env tag attrs)
        ~@(doall (map compile-form body))
        (muance.diff/close ~did-mount ~did-update))))
@@ -591,6 +591,7 @@
   (vtree/render-queue [this] render-queue)
   m/VTree
   (m/remove [vtree]
+    (assert (javafx.application.Platform/isFxApplicationThread))
     (let [vnode (vtree/vnode vtree)
           fragment (Group.)]
       (when-let [comp (a/aget vnode diff/index-children 0)]
@@ -621,6 +622,7 @@
 (extend-protocol m/VTreeInsert
   Parent
   (m/insert-before [ref-node vtree]
+    (assert (javafx.application.Platform/isFxApplicationThread))
     (let [parent-node (.getParent ref-node)]
       (let [vnode (vtree/vnode vtree)]
         (when-let [comp (a/aget vnode diff/index-children 0)]
@@ -628,6 +630,7 @@
         (a/aset vnode diff/index-node parent-node)
         (o/set diff/roots (vtree/id vtree) vtree))))
   (m/append-child [parent-node vtree]
+    (assert (javafx.application.Platform/isFxApplicationThread))
     (let [vnode (vtree/vnode vtree)]
       (when-let [comp (a/aget vnode diff/index-children 0)]
         (diff/insert-vnode-before* parent-node comp nil))
@@ -637,6 +640,7 @@
   (m/insert-before [ref-node vtree]
     (throw (UnsupportedOperationException.)))
   (m/append-child [parent-node vtree]
+    (assert (javafx.application.Platform/isFxApplicationThread))
     (let [vnode (vtree/vnode vtree)]
       (when-let [comp (a/aget vnode diff/index-children 0)]
         (diff/insert-vnode-before* parent-node comp nil))
@@ -671,7 +675,7 @@
           (when (nil? diff/*vnode*)
             (f e state-ref arg1 arg2)))))))
 
-(defn make-handler-3 [f state-ref arg1 arg2 arg3]
+(defn make-handler-3 [f arg1 arg2 arg3]
   (when (fn? f)
     (let [state-ref diff/*handlers-state-ref*]
       (reify
@@ -685,7 +689,7 @@
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n]
+        (changed [this observable o n]
           ;; Do not call listeners when trigerring an update from the render loop
           (when (nil? diff/*vnode*)
             (f o n state-ref)))))))
@@ -695,7 +699,7 @@
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n]
+        (changed [this observable o n]
           (when (nil? diff/*vnode*)
             (f o n state-ref arg1)))))))
 
@@ -704,7 +708,7 @@
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n]
+        (changed [this observable o n]
           (when (nil? diff/*vnode*)
             (f o n state-ref arg1 arg2)))))))
 
@@ -713,7 +717,7 @@
     (let [state-ref diff/*handlers-state-ref*]
       (reify
         javafx.beans.value.ChangeListener
-        (changed [this observalbe o n]
+        (changed [this observable o n]
           (when (nil? diff/*vnode*)
             (f o n state-ref arg1 arg2 arg3)))))))
 
@@ -861,14 +865,16 @@
   (let [render-queue (a/aget in 0)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)
         synchronous? (a/aget render-queue diff/index-render-queue-synchronous)]
-    (if synchronous?
-      (if (javafx.application.Platform/isFxApplicationThread)
-        (synchronous-render in)
-        (let [synchronous-promise (promise)]
-          (run-later (synchronous-render in)
-                     (deliver synchronous-promise true))
-          @synchronous-promise))
-      (.put ^SynchronousQueue render-queue-in in))
+    (cond (and (javafx.application.Platform/isFxApplicationThread)
+               (or (not (realized? first-render-promise))
+                   synchronous?))
+          (synchronous-render in)
+          synchronous?
+          (let [synchronous-promise (promise)]
+            (run-later (synchronous-render in)
+                       (deliver synchronous-promise true))
+            @synchronous-promise)
+          :else (.put ^SynchronousQueue render-queue-in in))
     @first-render-promise))
 
 (defn- render-queue-worker-loop []
@@ -907,3 +913,33 @@
      (when post-render-hook
        (set-post-render-hook vt post-render-hook))
      vt)))
+
+(defn set-position-in-border-pane-bottom []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
+  (muance.context/remove-node (m/parent-node) (m/node))
+  (.setBottom ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+
+(defn set-position-in-border-pane-center []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
+  (muance.context/remove-node (m/parent-node) (m/node))
+  (.setCenter ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+
+(defn set-position-in-border-pane-left []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
+  (muance.context/remove-node (m/parent-node) (m/node))
+  (.setLeft ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+
+(defn set-position-in-border-pane-right []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
+  (muance.context/remove-node (m/parent-node) (m/node))
+  (.setRight ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+
+(defn set-position-in-border-pane-top []
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
+  (muance.context/remove-node (m/parent-node) (m/node))
+  (.setTop ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
