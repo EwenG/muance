@@ -70,7 +70,8 @@
             remove-hook :remove-hook
             did-mount :did-mount did-update :did-update
             get-initial-state :get-initial-state
-            will-receive-props :will-receive-props} hooks
+            will-receive-props :will-receive-props
+            will-mount :will-mount} hooks
            params (if (= ::hooks hooks-or-params)
                     (second body)
                     hooks-or-params)
@@ -97,7 +98,8 @@
                             ~(when params-with-props props-sym)
                             (var ~name) ~key-sym
                             ~will-update ~will-unmount ~remove-hook
-                            ~will-receive-props ~get-initial-state)
+                            ~will-receive-props ~get-initial-state
+                            ~will-mount)
             (~(if (cljs-env? &env)
                 'cljs.core/when-not
                 'clojure.core/when-not) muance.diff/*skip*
@@ -116,7 +118,9 @@
     "Inserts the root node of a vtree as the last child(ren) of a parent-node."))
 
 (defn refresh-roots []
-  (o/forEach diff/roots refresh))
+  ;; clone to avoid concurrent modification while iterating the vtrees
+  ;; (think caling insert-before/append-child inside render loop)
+  (o/forEach #?(:cljs diff/roots :clj (.clone ^java.util.HashMap diff/roots)) refresh))
 
 (defn component-name
   "Return the fully qualified name of the node's component, as a string."
@@ -132,8 +136,7 @@
           (str "muance.core/key was called outside of render loop"))
   (a/aget diff/*vnode* diff/index-key))
 
-;; Useful to systematically execute an action on the DOM after it has been updated, or execute
-;; and action after a state update from a handler. 
+;; Useful to systematically execute an action on the DOM after it has been updated.
 (defn post-render
   "Registers a function to be executed after the next Muance render pass."
   [f]
