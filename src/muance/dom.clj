@@ -1,7 +1,8 @@
 (ns muance.dom
   (:require [clojure.string :as string]
             [muance.core :as m]
-            [muance.attributes :as attributes]))
+            [muance.attributes :as attributes]
+            [cljs.env]))
 
 (defonce ^:private typeid (atom 1))
 
@@ -202,12 +203,13 @@
         {key ::m/key
          {will-update :will-update will-unmount :will-unmount
           remove-hook :remove-hook
-          did-mount :did-mount did-update :did-update} ::m/hooks
+          did-mount :did-mount did-update :did-update
+          will-mount :will-mount} ::m/hooks
          :as attrs} (attributes/attributes body)
         _ (attributes/validate-attributes attrs)
         body (attributes/body-without-attributes body attrs)]
     (with-svg-namespace tag
-      `((muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~remove-hook)
+      `((muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~will-mount ~remove-hook)
         ~@(attribute-calls env tag attrs)
         ~@(doall (map compile-form body))
         (muance.diff/close ~did-mount ~did-update)))))
