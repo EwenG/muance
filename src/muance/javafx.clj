@@ -333,12 +333,12 @@
           ~(symbol key) val#))))
 
 (defn set-class [c]
-  (let [style-class (.getStyleClass ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node))]
+  (let [style-class (.getStyleClass ^javafx.css.Styleable (a/aget diff/*vnode* diff/index-node))]
     (.clear style-class)
     (.add style-class c)))
 
 (defn set-classes [classes]
-  (let [style-class (.getStyleClass ^javafx.scene.Node (a/aget diff/*vnode* diff/index-node))]
+  (let [style-class (.getStyleClass ^javafx.css.Styleable (a/aget diff/*vnode* diff/index-node))]
     (.clear style-class)
     (doseq [c classes]
       (.add style-class c))))
@@ -376,7 +376,8 @@
     (a/forEach a #(.append sb %))
     (str sb)))
 
-(defprotocol Styleable)
+(defprotocol Styleable
+  (set-style [this style]))
 
 (extend-protocol Styleable
   javafx.scene.Node
@@ -400,7 +401,7 @@
      (style-remove-nils! val# 0 (a/length val#))
      (let [val# (join-strings val#)]
        (when (diff/compare-attrs val#)
-         (.setStyle (a/aget diff/*vnode* diff/index-node) val#)
+         (set-style (a/aget diff/*vnode* diff/index-node) val#)
          (diff/set-attr val#)))
      (diff/inc-attrs 1)))
 
@@ -409,7 +410,7 @@
      (style-remove-nils! val# 0 (a/length val#))
      (let [val# (join-strings val#)]
        (when (and (> diff/*new-node* 0) (not (nil? val#)))
-         (.setStyle (a/aget diff/*vnode* diff/index-node) val#)))))
+         (set-style (a/aget diff/*vnode* diff/index-node) val#)))))
 
 (defn- input-value [tag val]
   (let [node-sym (with-meta (gensym "node") {:tag tag})]
@@ -962,3 +963,32 @@
           (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
   (muance.context/remove-node (m/parent-node) (m/node))
   (.setTop ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+
+(defn icon
+  ([svg-path]
+   (icon svg-path nil))
+  ([svg-path {:keys [color width height styleClass style]
+              :or {color javafx.scene.paint.Color/BLACK}}]
+   (let [region (javafx.scene.layout.Region.)
+         svg (javafx.scene.shape.SVGPath.)
+         background (when color
+                      (javafx.scene.layout.Background.
+                       ^"[Ljavafx.scene.layout.BackgroundFill;"
+                       (into-array
+                        javafx.scene.layout.BackgroundFill
+                        [(javafx.scene.layout.BackgroundFill. color nil nil)])))]
+     (.setContent svg svg-path)
+     (.setShape region svg)
+     (when width
+       (.setPrefWidth region width))
+     (when height
+       (.setPrefHeight region height))
+     (when style
+       (.setStyle region style))
+     (.add (.getStyleClass region) "muance-icon")
+     (when styleClass
+       (if (coll? styleClass)
+         (doseq [styleClass styleClass]
+           (.add (.getStyleClass region) styleClass))
+         (.add (.getStyleClass region) styleClass)))
+     region)))
