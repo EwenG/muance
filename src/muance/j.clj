@@ -40,7 +40,8 @@
                      :children-getter 'getMenus}
                     {:name 'menu :tag 'javafx.scene.control.Menu
                      :children-getter 'getItems}
-                    {:name 'menu-item :tag 'javafx.scene.control.MenuItem}})
+                    {:name 'menu-item :tag 'javafx.scene.control.MenuItem}
+                    {:name 'svg-path :tag 'javafx.scene.shape.SVGPath}})
 
 (def element-macros javafx-nodes)
 
