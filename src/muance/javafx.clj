@@ -333,15 +333,31 @@
           ~(symbol key) val#))))
 
 (defn set-class [c]
-  (let [style-class (.getStyleClass ^javafx.css.Styleable (a/aget diff/*vnode* diff/index-node))]
-    (.clear style-class)
-    (.add style-class c)))
+  (let [^javafx.css.Styleable node (a/aget diff/*vnode* diff/index-node)
+        node-classes (.getStyleClass node)
+        maybe-classes-to-remove (diff/get-user-data "__muance__style-classes")
+        ^ArrayList classes-to-remove (or maybe-classes-to-remove (ArrayList.))]
+    (when-not maybe-classes-to-remove
+      (diff/set-user-data "__muance__style-classes" classes-to-remove))
+    (doseq [c classes-to-remove]
+      (.remove node-classes c))
+    (.clear classes-to-remove)
+    (.add classes-to-remove c)
+    (.add node-classes c)))
 
 (defn set-classes [classes]
-  (let [style-class (.getStyleClass ^javafx.css.Styleable (a/aget diff/*vnode* diff/index-node))]
-    (.clear style-class)
+  (let [^javafx.css.Styleable node (a/aget diff/*vnode* diff/index-node)
+        node-classes (.getStyleClass node)
+        maybe-classes-to-remove (diff/get-user-data "__muance__style-classes")
+        ^ArrayList classes-to-remove (or maybe-classes-to-remove (ArrayList.))]
+    (when-not maybe-classes-to-remove
+      (diff/set-user-data "__muance__style-classes" classes-to-remove))
+    (doseq [c classes-to-remove]
+      (.remove node-classes c))
+    (.clear classes-to-remove)
     (doseq [c classes]
-      (.add style-class c))))
+      (.add classes-to-remove c)
+      (.add node-classes c))))
 
 (defn- style-class [c]
   `(let [c# ~c]
@@ -604,6 +620,9 @@
 (defmacro run-later [& body]
   `(run-later-fn (fn [] ~@body)))
 
+;; An empty comp useful to unmount vtree
+(m/defcomp empty-comp [])
+
 (deftype JavafxVTree [id vnode render-queue]
   vtree/VTree
   (vtree/id [this] id)
@@ -618,6 +637,8 @@
         (diff/insert-vnode-before* fragment comp nil))
       (a/aset vnode diff/index-node fragment)
       (o/remove diff/roots (vtree/id vtree))))
+  (m/unmount [this]
+    (m/patch this empty-comp))
   (m/refresh [vtree id it]
     (run-later
      (let [vnode (vtree/vnode vtree)
@@ -880,16 +901,17 @@
         (finally (deliver first-render-promise true))))))
 
 (defn- render-queue-fn [in]
-  (assert (nil? diff/*vnode*)
-          "Cannot call muance.core/patch or mutate local-state inside render loop")
   (let [render-queue (a/aget in 0)
+        ;; Forbid patching a vtree inside its own render loop
+        _ (assert (not (identical? render-queue diff/*render-queue*)))
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)
         synchronous? (a/aget render-queue diff/index-render-queue-synchronous)]
     (cond (and (javafx.application.Platform/isFxApplicationThread)
                (or (not (realized? first-render-promise))
                    synchronous?))
           (synchronous-render in)
-          synchronous?
+          (or (not (realized? first-render-promise))
+              synchronous?)
           (let [synchronous-promise (promise)]
             (run-later (synchronous-render in)
                        (deliver synchronous-promise true))
@@ -934,41 +956,31 @@
        (set-post-render-hook vt post-render-hook))
      vt)))
 
-(defn set-position-in-border-pane-bottom []
-  (assert (not (nil? diff/*vnode*))
-          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
-  (muance.context/remove-node (m/parent-node) (m/node))
-  (.setBottom ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+(defn- set-position-in-border-pane* [^javafx.scene.Node node]
+  (when-let [border-pane (.getParent node)]
+    (assert (instance? javafx.scene.layout.BorderPane border-pane))
+    (muance.context/remove-node ^javafx.scene.layout.BorderPane border-pane node)
+    border-pane))
 
-(defn set-position-in-border-pane-center []
-  (assert (not (nil? diff/*vnode*))
-          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
-  (muance.context/remove-node (m/parent-node) (m/node))
-  (.setCenter ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+(defn set-position-in-border-pane-bottom [node]
+  (.setBottom ^javafx.scene.layout.BorderPane (set-position-in-border-pane* node) node))
 
-(defn set-position-in-border-pane-left []
-  (assert (not (nil? diff/*vnode*))
-          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
-  (muance.context/remove-node (m/parent-node) (m/node))
-  (.setLeft ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+(defn set-position-in-border-pane-center [node]
+  (.setCenter ^javafx.scene.layout.BorderPane (set-position-in-border-pane* node) node))
 
-(defn set-position-in-border-pane-right []
-  (assert (not (nil? diff/*vnode*))
-          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
-  (muance.context/remove-node (m/parent-node) (m/node))
-  (.setRight ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+(defn set-position-in-border-pane-left [node]
+  (.setLeft ^javafx.scene.layout.BorderPane (set-position-in-border-pane* node) node))
 
-(defn set-position-in-border-pane-top []
-  (assert (not (nil? diff/*vnode*))
-          (str "muance.javafx/set-position-in-border-pane was called outside of render loop"))
-  (muance.context/remove-node (m/parent-node) (m/node))
-  (.setTop ^javafx.scene.layout.BorderPane (m/parent-node) (m/node)))
+(defn set-position-in-border-pane-right [node]
+  (.setRight ^javafx.scene.layout.BorderPane (set-position-in-border-pane* node) node))
+
+(defn set-position-in-border-pane-top [node]
+  (.setTop ^javafx.scene.layout.BorderPane (set-position-in-border-pane* node) node))
 
 (defn icon
   ([svg-path]
    (icon svg-path nil))
-  ([svg-path {:keys [color width height styleClass style]
-              :or {color javafx.scene.paint.Color/BLACK}}]
+  ([svg-path {:keys [color width height styleClass style]}]
    (let [region (javafx.scene.layout.Region.)
          svg (javafx.scene.shape.SVGPath.)
          background (when color
@@ -979,6 +991,8 @@
                         [(javafx.scene.layout.BackgroundFill. color nil nil)])))]
      (.setContent svg svg-path)
      (.setShape region svg)
+     (when background
+       (.setBackground region background))
      (when width
        (.setPrefWidth region width))
      (when height
@@ -992,3 +1006,12 @@
            (.add (.getStyleClass region) styleClass))
          (.add (.getStyleClass region) styleClass)))
      region)))
+
+(defn event-handler [f]
+  (assert diff/*component*
+          "muance.javafx/event-handler was called outside of render loop")
+  (let [state-ref (a/aget diff/*component* diff/index-comp-data diff/index-comp-data-state-ref)]
+    (reify javafx.event.EventHandler
+      (handle [this e]
+        (when (nil? diff/*vnode*)
+          (f this e state-ref))))))
