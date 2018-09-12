@@ -242,12 +242,17 @@
             (enqueue-unmounts child))
           (recur (inc i)))))))
 
+(defn comp-props [vnode]
+  (let [props (a/aget vnode index-comp-props)]
+    (if (identical? props no-props-flag)
+      nil props)))
+
 (defn call-unmounts [queue-start]
   (loop [i (dec *components-queue-count*)]
     (when (>= i queue-start)
       (let [vnode (a/aget components-queue i)
             component (if (component? vnode) vnode (a/aget vnode index-component))
-            props (a/aget component index-comp-props)
+            props (comp-props component)
             state (a/aget component index-comp-state)]
         ;; *vnode* is rebound in remove-vnode
         (set! *vnode* vnode)
@@ -421,11 +426,6 @@
     (will-receive-props prev-props props state-ref)
     (set! *state* @state-ref)))
 
-(defn comp-props [vnode]
-  (let [props (a/aget vnode index-comp-props)]
-    (if (identical? props no-props-flag)
-      nil props)))
-
 ;; hooks are called after open-impl to keep things consistent in case of an exception when
 ;; calling the hooks
 (defn open-impl [tag typeid key vnode-index]
@@ -559,7 +559,7 @@
   (let [vnode-index (or (a/aget *vnode* index-children-count) 0)
         prev (open-impl nil typeid key vnode-index)
         vnode *vnode*]
-    (set! *props* props)
+    (set! *props* (if props? props no-props-flag))
     (if (> *new-node* 0)
       (do
         (a/aset *vnode* index-unmount will-unmount)
@@ -575,7 +575,7 @@
                                    (.add *vnode*)
                                    (.add comp-fn)
                                    (.add *render-queue*))))]
-          (a/aset *vnode* index-comp-props (if props? *props* no-props-flag))
+          (a/aset *vnode* index-comp-props *props*)
           (a/aset *vnode* index-comp-data
                   #?(:cljs #js[component-name state-ref *svg-namespace*
                                vnode-index *component-depth* nil nil]
@@ -752,7 +752,7 @@
   (when (> i -1)
     (let [vnode (a/aget components-queue i)
           component (if (component? vnode) vnode (a/aget vnode index-component))
-          props (a/aget component index-comp-props)
+          props (comp-props component)
           state (a/aget component index-comp-state)]
       (set! *vnode* vnode)
       ((a/aget components-queue (dec i)) props state))
@@ -866,6 +866,18 @@
       (.-component-data)
       (a/aget 1)))
 
+(defn get-user-data [k]
+  (when-let [user-data (a/aget *vnode* index-user-data)]
+    (o/get user-data k)))
+
+(defn set-user-data [k v]
+  (let [user-data (a/aget *vnode* index-user-data)]
+    (if (nil? user-data)
+      (let [user-data #?(:cljs #js {} :clj (java.util.HashMap.))]
+        (o/set user-data k v)
+        (a/aset *vnode* index-user-data user-data))
+      (o/set user-data k v))))
+
 ;; node identity is the same implies that the svg-namespace value did not change
 
 ;; index-in-parent is set when moving node (including in splice) to keep things consistent
@@ -894,6 +906,6 @@
 ;; timers for javafx
 ;; check ScenicView
 ;; check exception in will-unmount
-;; check properties with getter isBlaBla... instead of getBlaBla
 
-
+;; Copy TreeCell AOT classes to ListCell/TableCell
+;; multi windows = muti stages ?
