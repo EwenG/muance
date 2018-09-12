@@ -205,7 +205,7 @@
       (o/remove diff/roots (vtree/id vtree))))
   (core/refresh [vtree id]
     (assert (nil? diff/*vnode*)
-            "Cannot call muance.core/patch or mutate local-state inside render loop")
+            "Cannot call muance.core/refresh inside render loop")
     (let [vnode (vtree/vnode vtree)
           the-render-queue (vtree/render-queue vtree)
           children (a/aget vnode diff/index-children)]
@@ -257,6 +257,7 @@
 
 (defn- handle-component-update [in]
   (let [render-queue (a/aget in 0)
+        _ (assert (not (identical? render-queue diff/*render-queue*)))
         props (a/aget in 1)
         comp-fn (a/aget in 2)
         vnode (a/aget in 3)
