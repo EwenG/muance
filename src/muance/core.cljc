@@ -109,6 +109,8 @@
 (defprotocol VTree
   (remove [this]
     "Detach the root node of a vtree. A detached vtree can still be patched and added back to the DOM.")
+  (unmount [this]
+    "Unmount the top level vnode of this vtree.")
   (refresh #?(:cljs [this id] :clj [this id it])))
 
 (defprotocol VTreeInsert
@@ -179,20 +181,14 @@
   [k]
   (assert (not (nil? diff/*vnode*))
           (str "muance.core/get was called outside of render loop"))
-  (when-let [user-data (a/aget diff/*vnode* diff/index-user-data)]
-    (o/get user-data k)))
+  (diff/get-user-data k))
 
 (defn set
   "Store a value on the current node/component. This function is intended to be used in lifecycle hooks. The stored value can be retrieved using muance.core/get."
   [k v]
   (assert (not (nil? diff/*vnode*))
           (str "muance.core/set was called outside of render loop"))
-  (let [user-data (a/aget diff/*vnode* diff/index-user-data)]
-    (if (nil? user-data)
-      (let [user-data #?(:cljs #js {} :clj (java.util.HashMap.))]
-        (o/set user-data k v)
-        (a/aset diff/*vnode* diff/index-user-data user-data))
-      (o/set user-data k v))))
+  (diff/set-user-data k v))
 
 ;;;;
 
