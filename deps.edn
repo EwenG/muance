@@ -6,7 +6,6 @@
                                org.clojure/test.check {:mvn/version "0.9.0"}}}
            :dev {:extra-paths ["test" "target/classes"]
                  :extra-deps {ch.qos.logback/logback-classic {:mvn/version "1.2.3"}}}
-           :javafx {:extra-deps {scenicview/scenivview {:local/root "scenicview.jar"}}}
            :build {:extra-deps {badigeon/badigeon {:git/url "git@github.com:EwenG/badigeon.git"
                                                    :sha "2aacfc23f1f332d91575041a9df35436007277e9"
                                                    :tag "0.0.2"}}

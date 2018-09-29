@@ -190,6 +190,9 @@
   (when (and (> diff/*new-node* 0) (not (nil? val)))
     (set-style-custom key (str val))))
 
+;; An empty comp useful to unmount vtree
+(core/defcomp empty-comp [])
+
 (deftype DOMVTree [id vnode render-queue]
   vtree/VTree
   (vtree/id [this] id)
@@ -203,6 +206,8 @@
         (diff/insert-vnode-before* fragment comp nil))
       (aset vnode diff/index-node fragment)
       (o/remove diff/roots (vtree/id vtree))))
+  (core/unmount [this]
+    (core/patch this empty-comp))
   (core/refresh [vtree id]
     (assert (nil? diff/*vnode*)
             "Cannot call muance.core/refresh inside render loop")
