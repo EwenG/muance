@@ -93,7 +93,7 @@ Components are called like functions and take a *key* as an optional first param
 ```
 
 Components are stateful. A Component is re-rendered when one of its props or local state changes.
-The value of components local state can be retrieved using the `(muance.core/vnode)` function and can be used in the component body or one of its [lifecycle hooks](#lifecycle-hooks) methods.
+The value of components local state can be retrieved using the `(muance.core/state)` function and can be used in the component body or one of its [lifecycle hooks](#lifecycle-hooks) methods.
 
 Components local state is an [atom](https://clojure.org/reference/atoms). The atom is passed as a parameter to [event handlers](#event-handlers) and several of the component [lifecycle hooks](#lifecycle-hooks). Changing the value of the atom marks the component as needed to be re-rendered.
 
