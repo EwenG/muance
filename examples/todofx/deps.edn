@@ -1,7 +1,0 @@
-{:paths ["src" "resources"]
- :deps {org.clojure/clojure {:mvn/version "1.9.0"}
-        muance/muance {:local/root "../../../muance"}}
- :aliases {:build {:extra-paths ["build"]
-                   :extra-deps {badigeon/badigeon {:git/url "git@github.com:EwenG/badigeon.git"
-                                                   :sha "4e55dc9a6f1954d7bc37429430dc00d14576a201"
-                                                   :tag "0.0.3"}}}}}
