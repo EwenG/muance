@@ -1,12 +1,12 @@
 package muance.javafx;
 
 import clojure.lang.IFn;
-import javafx.scene.control.TreeView;
+import javafx.scene.control.TableColumn;
 import javafx.util.Callback;
 
 import java.util.ArrayList;
 
-public class TreeCellFactory implements CellFactory, Callback<TreeView, TreeCell> {
+public class TableCellFactory implements CellFactory, Callback<TableColumn, TableCell> {
 
   private Object cellComponent;
   private IFn updateItem;
@@ -15,7 +15,7 @@ public class TreeCellFactory implements CellFactory, Callback<TreeView, TreeCell
 
   private ArrayList<Cell> cells = new ArrayList<>();
 
-  public TreeCellFactory(Object cellComponent, IFn updateItem, IFn cellConstructor, IFn cellDestructor) {
+  public TableCellFactory(Object cellComponent, IFn updateItem, IFn cellConstructor, IFn cellDestructor) {
     this.cellComponent = cellComponent;
     this.updateItem = updateItem;
     this.cellConstructor = cellConstructor;
@@ -23,8 +23,8 @@ public class TreeCellFactory implements CellFactory, Callback<TreeView, TreeCell
   }
 
   @Override
-  public TreeCell call(TreeView o) {
-    TreeCell cell = new TreeCell(o, cellComponent, updateItem, cellConstructor, cellDestructor);
+  public TableCell call(TableColumn o) {
+    TableCell cell = new TableCell(o, cellComponent, updateItem, cellConstructor, cellDestructor);
     cells.add(cell);
     return cell;
   }

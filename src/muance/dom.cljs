@@ -216,6 +216,9 @@
                          true)
         (diff/process-post-render-hooks the-render-queue)))))
 
+(defn refresh-roots []
+  (o/forEach diff/roots core/refresh))
+
 (extend-protocol context/CreateElement
   nil
   (create-element [tag]

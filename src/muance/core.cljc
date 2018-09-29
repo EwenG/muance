@@ -119,11 +119,6 @@
   (append-child [parent-node vtree]
     "Inserts the root node of a vtree as the last child(ren) of a parent-node."))
 
-(defn refresh-roots []
-  ;; clone to avoid concurrent modification while iterating the vtrees
-  ;; (think caling insert-before/append-child inside render loop)
-  (o/forEach #?(:cljs diff/roots :clj (.clone ^java.util.HashMap diff/roots)) refresh))
-
 (defn component-name
   "Return the fully qualified name of the node's component, as a string."
   []
@@ -189,6 +184,13 @@
   (assert (not (nil? diff/*vnode*))
           (str "muance.core/set was called outside of render loop"))
   (diff/set-user-data k v))
+
+(defn unset
+  "Remove a value from the current node/component. This function is intended to be used in lifecycle hooks."
+  [k]
+  (assert (not (nil? diff/*vnode*))
+          (str "muance.core/set was called outside of render loop"))
+  (diff/unset-user-data k))
 
 ;;;;
 

@@ -12,7 +12,7 @@
   (clean/clean "target")
   (let [lib 'muance/muance-aot
         coords {:mvn/version "0.0.1-SNAPSHOT"}
-        _ (javac/javac "src-java" {:javac-options ["--module-path" (str "javafx-sdk-11/lib:" clojure-path) "-deprecation" "-g:none" "-source" "10" "-target" "10"]})
+        _ (javac/javac "src-java" {:javac-options ["--module-path" (str "javafx-sdk-11/lib:" clojure-path) "-deprecation" "-g:none" "-source" "10" "-target" "10" "--add-exports" "javafx.graphics/com.sun.javafx.css=muance"]})
         jar-file (jar/jar lib coords
                           {:paths ["target/classes"]
                            :deps {}})]

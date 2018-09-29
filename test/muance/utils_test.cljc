@@ -38,5 +38,5 @@
       (new-vtree vtree nil))
      ([vtree vtree-params]
       (when vtree
-        (m/remove vtree))
+        (javafx/run-later (m/remove vtree)))
       (javafx/vtree (assoc vtree-params :post-render-hook update-v-state)))))

@@ -2,16 +2,16 @@ package muance.javafx;
 
 import clojure.lang.IFn;
 import javafx.scene.Node;
-import javafx.scene.control.TreeView;
+import javafx.scene.control.TableColumn;
 
-public class TreeCell<T> extends javafx.scene.control.TreeCell<T> implements Cell {
+public class TableCell<S, T> extends javafx.scene.control.TableCell<S, T> implements Cell {
   private IFn updateItem;
   private IFn destructor;
   private Object cellComponent;
   private Node node;
   private Object vtree;
 
-  public TreeCell(TreeView o, Object cellComponent, IFn updateItem, IFn constructor, IFn destructor) {
+  public TableCell(TableColumn o, Object cellComponent, IFn updateItem, IFn constructor, IFn destructor) {
     super();
     this.cellComponent = cellComponent;
     this.updateItem = updateItem;

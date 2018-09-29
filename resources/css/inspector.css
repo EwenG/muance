@@ -1,0 +1,40 @@
+.hyperlink:focused, .hyperlink:hover {
+  -fx-border-color: transparent;
+  -fx-underline: true;
+}
+.muance-icon {
+  -fx-background-color: black;
+}
+.button.active .muance-icon {
+  -fx-background-color: -fx-focus-color;
+}
+.button {
+  -fx-cursor: hand;
+}
+.tree-cell:selected Text {
+  -fx-fill: white;
+}
+.tree-cell:selected Hyperlink {
+  -fx-text-fill: white;
+}
+.tree-cell Hyperlink {
+  -fx-text-fill: slateblue;
+}
+.tree-item-type {
+  -fx-fill: purple;
+}
+.tree-item-property-key {
+  -fx-fill: darkgoldenrod;
+}
+.tree-item-property-value {
+  -fx-fill: darkblue;
+}
+.tree-cell.highlighted {
+  -fx-background-color: #6495ed80;
+}
+.styles-properties-pane FlowPane {
+  -fx-padding: 5 0 5 0;
+}
+.styles-properties-pane TextFlow {
+  -fx-padding: 5;
+}

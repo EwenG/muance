@@ -9,8 +9,10 @@
     (doto (Thread. ^Runnable lauch-app)
       (.setDaemon false)
       (.start))
+    @muance.javafx.MuanceFxApp/hostServicesPromise
+    @muance.javafx.MuanceFxApp/parametersPromise
     @muance.javafx.MuanceFxApp/stagePromise))
 
-;; Some Classes cannot be loaded before the javax platform is initialized. It is initialized by start-app.
+;; Some Classes cannot be loaded before the javax platform is initialized. They are initialized by start-app.
 
 

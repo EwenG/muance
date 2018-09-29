@@ -40,3 +40,10 @@
             (assert (apply distinct? (map name attrs-keys))
                     (str "duplicate attributes: " (pr-str attrs-keys)))))))
     (into {} (map vec attrs))))
+
+(defn map-attributes [f body]
+  (let [attrs (->> (partition 2 body)
+                   (take-while (comp keyword? first))
+                   (mapcat f))
+        body-rest (drop (count attrs) body)]
+    (concat attrs body-rest)))

@@ -11,16 +11,19 @@
             [clojure.tools.logging :as log])
   (:import [java.util ArrayList Collections]
            [javafx.collections ObservableList]
-           [javafx.beans.property ObjectProperty]
+           [javafx.beans.property ObjectProperty SimpleObjectProperty]
            [javafx.scene Scene Parent Group]
            [javafx.scene.layout Pane]
-           [javafx.scene.control TreeItem]
+           [javafx.scene.control TreeItem ContentDisplay TableColumn]
            [javafx.stage Stage]
            [javafx.beans.property ObjectProperty]
            [java.util.concurrent SynchronousQueue]
-           [muance.javafx AnimationTimer FrozenRenderQueue]))
+           [muance.javafx AnimationTimer FrozenRenderQueue
+            TreeCellFactory TableCellFactory CellFactory]))
 
 (defonce ^Stage stage (init/start-app))
+(defonce ^Stage host-services @muance.javafx.MuanceFxApp/hostServicesPromise)
+(defonce ^Stage parameters @muance.javafx.MuanceFxApp/parametersPromise)
 
 (defonce ^:private typeid (atom 1))
 
@@ -640,16 +643,21 @@
   (m/unmount [this]
     (m/patch this empty-comp))
   (m/refresh [vtree id it]
-    (run-later
-     (let [vnode (vtree/vnode vtree)
-           the-render-queue (vtree/render-queue vtree)
-           children (a/aget vnode diff/index-children)]
-       (when-let [comp (a/aget children 0)]
-         (diff/patch-impl the-render-queue vnode comp
-                          (diff/get-comp-render-fn comp)
-                          (a/aget comp diff/index-comp-props)
-                          true)
-         (diff/process-post-render-hooks the-render-queue))))))
+    (assert (javafx.application.Platform/isFxApplicationThread))
+    (let [vnode (vtree/vnode vtree)
+          the-render-queue (vtree/render-queue vtree)
+          children (a/aget vnode diff/index-children)]
+      (when-let [comp (a/aget children 0)]
+        (diff/patch-impl the-render-queue vnode comp
+                         (diff/get-comp-render-fn comp)
+                         (a/aget comp diff/index-comp-props)
+                         true)
+        (diff/process-post-render-hooks the-render-queue)))))
+
+(defn refresh-roots []
+  ;; clone to avoid concurrent modification while iterating the vtrees
+  ;; (think caling insert-before/append-child inside render loop)
+  (run-later (o/forEach (.clone ^java.util.HashMap diff/roots) m/refresh)))
 
 (defn- new-root-vnode []
   (doto (ArrayList.)
@@ -695,8 +703,9 @@
         javafx.event.EventHandler
         (handle [this e]
           ;; Do not call handlers from the render loop
-          (when (nil? diff/*vnode*)
-            (f e state-ref)))))))
+          (if (nil? diff/*vnode*)
+            (f e state-ref)
+            (run-later (f e state-ref))))))))
 
 (defn make-handler-1 [f arg1]
   (when (fn? f)
@@ -704,8 +713,9 @@
       (reify
         javafx.event.EventHandler
         (handle [this e]
-          (when (nil? diff/*vnode*)
-            (f e state-ref arg1)))))))
+          (if (nil? diff/*vnode*)
+            (f e state-ref arg1)
+            (run-later (f e state-ref arg1))))))))
 
 (defn make-handler-2 [f arg1 arg2]
   (when (fn? f)
@@ -713,8 +723,9 @@
       (reify
         javafx.event.EventHandler
         (handle [this e]
-          (when (nil? diff/*vnode*)
-            (f e state-ref arg1 arg2)))))))
+          (if (nil? diff/*vnode*)
+            (f e state-ref arg1 arg2)
+            (run-later (f e state-ref arg1 arg2))))))))
 
 (defn make-handler-3 [f arg1 arg2 arg3]
   (when (fn? f)
@@ -722,8 +733,9 @@
       (reify
         javafx.event.EventHandler
         (handle [this e]
-          (when (nil? diff/*vnode*)
-            (f e state-ref arg1 arg2 arg3)))))))
+          (if (nil? diff/*vnode*)
+            (f e state-ref arg1 arg2 arg3)
+            (run-later (f e state-ref arg1 arg2 arg3))))))))
 
 (defn make-listener-0 [f]
   (when (fn? f)
@@ -731,9 +743,10 @@
       (reify
         javafx.beans.value.ChangeListener
         (changed [this observable o n]
-          ;; Do not call listeners when trigerring an update from the render loop
-          (when (nil? diff/*vnode*)
-            (f o n state-ref)))))))
+          ;; Always call liseners asynchronously to avoid trigerring an update from the render loop
+          (if (nil? diff/*vnode*)
+            (f o n state-ref)
+            (run-later (f o n state-ref))))))))
 
 (defn make-listener-1 [f arg1]
   (when (fn? f)
@@ -741,8 +754,9 @@
       (reify
         javafx.beans.value.ChangeListener
         (changed [this observable o n]
-          (when (nil? diff/*vnode*)
-            (f o n state-ref arg1)))))))
+          (if (nil? diff/*vnode*)
+            (f o n state-ref arg1)
+            (run-later (f o n state-ref arg1))))))))
 
 (defn make-listener-2 [f arg1 arg2]
   (when (fn? f)
@@ -750,8 +764,9 @@
       (reify
         javafx.beans.value.ChangeListener
         (changed [this observable o n]
-          (when (nil? diff/*vnode*)
-            (f o n state-ref arg1 arg2)))))))
+          (if (nil? diff/*vnode*)
+            (f o n state-ref arg1 arg2)
+            (run-later (f o n state-ref arg1 arg2))))))))
 
 (defn make-listener-3 [f state-ref arg1 arg2 arg3]
   (when (fn? f)
@@ -759,8 +774,9 @@
       (reify
         javafx.beans.value.ChangeListener
         (changed [this observable o n]
-          (when (nil? diff/*vnode*)
-            (f o n state-ref arg1 arg2 arg3)))))))
+          (if (nil? diff/*vnode*)
+            (f o n state-ref arg1 arg2 arg3)
+            (run-later (f o n state-ref arg1 arg2 arg3))))))))
 
 (defn handle-listener [^javafx.beans.value.ObservableValue property
                        ^javafx.beans.value.ChangeListener listener]
@@ -800,7 +816,7 @@
         ;; it is nil before the first rendering and this would cause potential concurrency
         ;; (multiple threads) problems
         depth (a/aget in 4)
-        post-render-fn (a/aget in 6)
+        post-render-fn (a/aget in 5)
         processing-flag (a/aget render-queue diff/index-render-queue-processing-flag)
         dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)
         first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)]
@@ -956,6 +972,100 @@
        (set-post-render-hook vt post-render-hook))
      vt)))
 
+(defn- cell-constructor [this o]
+  (let [node (Group.)
+        vtree (vtree {;; The screen sometimes blinks when rendering asynchronously
+                      :synchronous? true})]
+    (.setNode this node)
+    (.setVtree this vtree)
+    (m/append-child node vtree)
+    (.setContentDisplay this ContentDisplay/GRAPHIC_ONLY)))
+
+(defn- cell-destructor [this]
+  (let [vtree (.getVtree this)]
+    (m/unmount vtree)
+    (m/remove vtree)))
+
+(defn get-cell [node]
+  (loop [parent node]
+    (if (instance? javafx.scene.control.Cell parent)
+      parent
+      (when parent
+        (recur (.getParent parent))))))
+
+(defn- cell-update-item [this item empty]
+  (if (or empty (nil? item))
+    (.setGraphic this nil)
+    (let [node (.getNode this)
+          vtree (.getVtree this)
+          cell-component (.getCellComponent this)]
+      (.setGraphic this node)
+      (when cell-component
+        (m/patch vtree cell-component item)))))
+
+(defn- comp-update-items [update-item]
+  (fn [this item empty]
+    (cell-update-item this item empty)
+    (when update-item (update-item this item empty))))
+
+(defn- comp-constructor [constructor]
+  (fn [this o]
+    (cell-constructor this o)
+    (when constructor (constructor this o))))
+
+(defn- comp-destructor [destructor]
+  (fn [this]
+    (cell-destructor this)
+    (when destructor (destructor this))))
+
+(defn tree-cell-factory
+  ([cell-component]
+   (TreeCellFactory. cell-component
+                     cell-update-item
+                     cell-constructor
+                     cell-destructor))
+  ([cell-component update-item]
+   (TreeCellFactory. cell-component
+                     (comp-update-items update-item)
+                     cell-constructor
+                     cell-destructor))
+  ([cell-component update-item constructor destructor]
+   (TreeCellFactory. cell-component
+                     (comp-update-items update-item)
+                     (comp-constructor constructor)
+                     (comp-destructor destructor))))
+
+(defn tree-view-will-unmount [props state]
+  (when-let [cell-factory (.getCellFactory (m/node))]
+    (when (instance? CellFactory cell-factory)
+      (doseq [cell (.getCells cell-factory)]
+        (.destroy cell)))))
+
+(defn table-cell-factory
+  ([cell-component]
+   (TableCellFactory. cell-component
+                      cell-update-item
+                      cell-constructor
+                      cell-destructor))
+  ([cell-component update-item]
+   (TableCellFactory. cell-component
+                      (comp-update-items update-item)
+                      cell-constructor
+                      cell-destructor))
+  ([cell-component update-item constructor destructor]
+   (TableCellFactory. cell-component
+                      (comp-update-items update-item)
+                      (comp-constructor constructor)
+                      (comp-destructor destructor))))
+
+(defn table-view-will-unmount [props state]
+  (let [columns (.getColumns (m/node))]
+    (doseq [column columns]
+      (when-let [cell-factory (.getCellFactory column)]
+        (when (instance? CellFactory cell-factory)
+          (doseq [cell (.getCells cell-factory)]
+            (.destroy cell)))))))
+
 (defn- set-position-in-border-pane* [^javafx.scene.Node node]
   (when-let [border-pane (.getParent node)]
     (assert (instance? javafx.scene.layout.BorderPane border-pane))
@@ -976,6 +1086,10 @@
 
 (defn set-position-in-border-pane-top [node]
   (.setTop ^javafx.scene.layout.BorderPane (set-position-in-border-pane* node) node))
+
+(defn set-contraints-in-grid-pane
+  ([node column-index row-index])
+  ([node column-index row-index column-span row-span]))
 
 (defn icon
   ([svg-path]
@@ -1008,10 +1122,27 @@
      region)))
 
 (defn event-handler [f]
-  (assert diff/*component*
+  (assert diff/*vnode*
           "muance.javafx/event-handler was called outside of render loop")
-  (let [state-ref (a/aget diff/*component* diff/index-comp-data diff/index-comp-data-state-ref)]
+  (let [component (if (diff/component? diff/*vnode*)
+                    diff/*vnode*
+                    (a/aget diff/*vnode* diff/index-component))
+        state-ref (a/aget component diff/index-comp-data diff/index-comp-data-state-ref)]
     (reify javafx.event.EventHandler
       (handle [this e]
-        (when (nil? diff/*vnode*)
-          (f this e state-ref))))))
+        (if (nil? diff/*vnode*)
+          (f this e state-ref)
+          (run-later (f this e state-ref)))))))
+
+(defn change-listener [f]
+  (assert diff/*vnode*
+          "muance.javafx/change-listener was called outside of render loop")
+  (let [component (if (diff/component? diff/*vnode*)
+                    diff/*vnode*
+                    (a/aget diff/*vnode* diff/index-component))
+        state-ref (a/aget component diff/index-comp-data diff/index-comp-data-state-ref)]
+    (reify javafx.beans.value.ChangeListener
+      (changed [this observable o n]
+        (if (nil? diff/*vnode*)
+          (f this observable o n state-ref)
+          (run-later (f this observable o n state-ref)))))))

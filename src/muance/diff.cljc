@@ -878,6 +878,11 @@
         (a/aset *vnode* index-user-data user-data))
       (o/set user-data k v))))
 
+(defn unset-user-data [k]
+  (let [user-data (a/aget *vnode* index-user-data)]
+    (when user-data
+      (o/remove user-data k))))
+
 ;; node identity is the same implies that the svg-namespace value did not change
 
 ;; index-in-parent is set when moving node (including in splice) to keep things consistent
@@ -902,10 +907,12 @@
 
 ;; list-view, tree-view ... cell factories are not used because it is hard to support with stateful vtrees / lifecycle hooks. Displaying a big list requires paging/lazy loading anyway
 
+;; Nil properties are removed instead of the value beeing set to nil. Setting a property value
+;; to nil requires using lifecycle hooks
+
 ;; Add a test for the first case of duplicate keys
 ;; timers for javafx
 ;; check ScenicView
 ;; check exception in will-unmount
 
 ;; Copy TreeCell AOT classes to ListCell/TableCell
-;; multi windows = muti stages ?

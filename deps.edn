@@ -9,4 +9,5 @@
            :javafx {:extra-deps {scenicview/scenivview {:local/root "scenicview.jar"}}}
            :build {:extra-deps {badigeon/badigeon {:git/url "git@github.com:EwenG/badigeon.git"
                                                    :sha "2aacfc23f1f332d91575041a9df35436007277e9"
-                                                   :tag "0.0.2"}}}}}
+                                                   :tag "0.0.2"}}
+                   :extra-paths ["build"]}}}
