@@ -855,9 +855,7 @@
 ;; to nil requires using lifecycle hooks
 
 ;; Add a test for the first case of duplicate keys
-;; timers for javafx
-;; check ScenicView
-;; check exception in will-unmount
+;; check exceptions in will-unmount
+;; get-initial-state for component children ? -- with access to the current node
 
-;; Copy TreeCell AOT classes to ListCell/TableCell
-;; unmount for dom.cljs
+

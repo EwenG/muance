@@ -3,7 +3,6 @@
             [muance.vtree :as vtree]
             [muance.context :as context]
             [muance.core :as core]
-            [muance.arrays :as a]
             [goog.object :as o]))
 
 (def ^:const svg-ns "http://www.w3.org/2000/svg")
@@ -213,11 +212,11 @@
             "Cannot call muance.core/refresh inside render loop")
     (let [vnode (vtree/vnode vtree)
           the-render-queue (vtree/render-queue vtree)
-          children (a/aget vnode diff/index-children)]
-      (when-let [comp (a/aget children 0)]
+          children (aget vnode diff/index-children)]
+      (when-let [comp (aget children 0)]
         (diff/patch-impl the-render-queue vnode comp
                          (diff/get-comp-render-fn comp)
-                         (a/aget comp diff/index-comp-props)
+                         (aget comp diff/index-comp-props)
                          true)
         (diff/process-post-render-hooks the-render-queue)))))
 
@@ -264,64 +263,64 @@
   #js [nil nil (.createDocumentFragment js/document) nil 0 #js []])
 
 (defn- handle-component-update [in]
-  (let [render-queue (a/aget in 0)
+  (let [render-queue (aget in 0)
         _ (assert (not (identical? render-queue diff/*render-queue*)))
-        props (a/aget in 1)
-        comp-fn (a/aget in 2)
-        vnode (a/aget in 3)
+        props (aget in 1)
+        comp-fn (aget in 2)
+        vnode (aget in 3)
         ;; depth == -1 means this was a call to muance.core/patch. In this case, the vnode is
         ;; the vtree vnode. We don't directly pass the vnode of the component at depth 0 because
         ;; it is nil before the firs rendering and this would cause potential concurrency
         ;; (multiple threads) problems
-        depth (a/aget in 4)
-        post-render-fn (a/aget in 5)
-        synchronous? (a/aget render-queue diff/index-render-queue-synchronous)
-        processing-flag (a/aget render-queue diff/index-render-queue-processing-flag)
-        dirty-flag (a/aget render-queue diff/index-render-queue-dirty-flag)
-        first-render-promise (a/aget render-queue diff/index-render-queue-first-render-promise)]
+        depth (aget in 4)
+        post-render-fn (aget in 5)
+        synchronous? (aget render-queue diff/index-render-queue-synchronous)
+        processing-flag (aget render-queue diff/index-render-queue-processing-flag)
+        dirty-flag (aget render-queue diff/index-render-queue-dirty-flag)
+        first-render-promise (aget render-queue diff/index-render-queue-first-render-promise)]
     ;; if this is the first render
     (if (not first-render-promise)
       ;; first render is synchronous
       (do
         (diff/patch-impl render-queue vnode nil comp-fn props false)
         (diff/process-post-render-hooks render-queue)
-        (a/aset render-queue diff/index-render-queue-first-render-promise true))
+        (aset render-queue diff/index-render-queue-first-render-promise true))
       ;; if the patch data is coming from a call to the patch fn
       (do
         (if (= depth -1) 
-          (if-let [dirty-comps (a/aget render-queue diff/index-render-queue-offset)]
+          (if-let [dirty-comps (aget render-queue diff/index-render-queue-offset)]
             (do
-              (a/aset dirty-comps 0 post-render-fn)
-              (a/aset dirty-comps 1 props)
-              (a/aset dirty-comps 2 comp-fn)
-              (a/aset dirty-comps 3 vnode))
-            (a/aset render-queue diff/index-render-queue-offset
+              (aset dirty-comps 0 post-render-fn)
+              (aset dirty-comps 1 props)
+              (aset dirty-comps 2 comp-fn)
+              (aset dirty-comps 3 vnode))
+            (aset render-queue diff/index-render-queue-offset
                     #js [post-render-fn props comp-fn vnode]))
-          (let [comp-data (a/aget vnode diff/index-comp-data)]
-            (when-not (identical? dirty-flag (a/aget comp-data diff/index-comp-data-dirty-flag))
-              (if-let [dirty-comps (a/aget render-queue (+ (inc depth) diff/index-render-queue-offset))]
-                (do (a/add dirty-comps post-render-fn)
-                    (a/add dirty-comps props)
-                    (a/add dirty-comps comp-fn)
-                    (a/add dirty-comps vnode))
-                (a/aset render-queue (+ (inc depth) diff/index-render-queue-offset)
+          (let [comp-data (aget vnode diff/index-comp-data)]
+            (when-not (identical? dirty-flag (aget comp-data diff/index-comp-data-dirty-flag))
+              (if-let [dirty-comps (aget render-queue (+ (inc depth) diff/index-render-queue-offset))]
+                (do (.push dirty-comps post-render-fn)
+                    (.push dirty-comps props)
+                    (.push dirty-comps comp-fn)
+                    (.push dirty-comps vnode))
+                (aset render-queue (+ (inc depth) diff/index-render-queue-offset)
                         #js [post-render-fn props comp-fn vnode]))
-              (a/aset comp-data diff/index-comp-data-dirty-flag dirty-flag))))
-        (a/aset render-queue diff/index-render-queue-pending-flag true)
+              (aset comp-data diff/index-comp-data-dirty-flag dirty-flag))))
+        (aset render-queue diff/index-render-queue-pending-flag true)
         (if synchronous?
           (binding [diff/*rendered-flag* (js/Object.)]
             (diff/process-render-queue render-queue render-queue)
             (diff/process-post-render-hooks render-queue)
-            (a/aset render-queue diff/index-render-queue-processing-flag false)
-            (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
-          (when-not (a/aget render-queue diff/index-render-queue-processing-flag)
-            (a/aset render-queue diff/index-render-queue-processing-flag true)
+            (aset render-queue diff/index-render-queue-processing-flag false)
+            (aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
+          (when-not (aget render-queue diff/index-render-queue-processing-flag)
+            (aset render-queue diff/index-render-queue-processing-flag true)
             (.requestAnimationFrame
              js/window 
              (fn []
                (binding [diff/*rendered-flag* (js/Object.)]
-                 (a/aset render-queue diff/index-render-queue-processing-flag false)
-                 (a/aset render-queue diff/index-render-queue-dirty-flag (js/Object.))
+                 (aset render-queue diff/index-render-queue-processing-flag false)
+                 (aset render-queue diff/index-render-queue-dirty-flag (js/Object.))
                  (diff/process-render-queue render-queue render-queue)
                  (diff/process-post-render-hooks render-queue))))))))))
 
@@ -337,7 +336,7 @@
                         #js [#'handle-component-update synchronous? false false (js/Object.)
                              false #js [] #js[]])]
      (when post-render-hook
-       (a/aset (vtree/render-queue vt)
+       (aset (vtree/render-queue vt)
                diff/index-render-queue-post-render-hooks 0
                (partial post-render-hook vt)))
      vt)))

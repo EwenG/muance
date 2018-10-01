@@ -1,6 +1,7 @@
 (ns muance.core
   (:refer-clojure :exclude [remove key get set])
-  (:require [muance.vtree :as vtree]))
+  (:require [muance.diff]
+            [muance.vtree :as vtree]))
 
 (defprotocol VTree
   (remove [this]
