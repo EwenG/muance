@@ -204,12 +204,14 @@
          {will-update :will-update will-unmount :will-unmount
           remove-hook :remove-hook
           did-mount :did-mount did-update :did-update
-          will-mount :will-mount} ::m/hooks
+          will-mount :will-mount
+          get-initial-state :get-initial-state} ::m/hooks
          :as attrs} (attributes/attributes body)
         _ (attributes/validate-attributes attrs)
         body (attributes/body-without-attributes body attrs)]
     (with-svg-namespace tag
-      `((muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~will-mount ~remove-hook)
+      `((muance.diff/open ~tag ~typeid ~key ~will-update ~will-unmount ~will-mount
+                          ~get-initial-state ~remove-hook)
         ~@(attribute-calls env tag attrs)
         ~@(doall (map compile-form body))
         (muance.diff/close ~did-mount ~did-update)))))

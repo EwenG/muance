@@ -467,7 +467,7 @@
             (set! *vnode* vnode)
             prev))))))
 
-(defn open [tag typeid key will-update will-unmount will-mount remove-hook]
+(defn open [tag typeid key will-update will-unmount will-mount get-initial-state remove-hook]
   (assert (not (nil? *component*)) (str "tag " tag " was called outside of render loop"))
   (let [prev (open-impl tag (or typeid tag) key
                         (or (aget *vnode* index-children-count) 0))]
@@ -482,9 +482,16 @@
             (set! *vnode-to-remove* nil))
           (when (= tag "foreignObject")
             (set! *svg-namespace* 0))
-          (when will-mount (will-mount *props* *state*))
           (aset *vnode* index-unmount will-unmount)
-          (aset *vnode* index-remove-hook remove-hook))
+          (aset *vnode* index-remove-hook remove-hook)    
+          ;; call get-initial-state and will-mount at the end to keep things consistent
+          ;; in case of an exception in get-initial-state or will-mount
+          (when get-initial-state
+            (let [state-ref (aget *component* index-comp-data index-comp-data-state-ref)]
+              (reset! state-ref (get-initial-state *props*))
+              (set! *state* @state-ref)
+              (aset *component* index-comp-state *state*)))
+          (when will-mount (will-mount *props* *state*)))
       (do
         (when prev
           (if-let [prev-key (aget prev index-key)]
@@ -545,9 +552,7 @@
           ;; call get-initial-state and will-mount at the end to keep things consistent
           ;; in case of an exception in get-initial-state or will-mount
           (if get-initial-state
-            (do (set! *vnode* nil)
-                (reset! state-ref (get-initial-state *props*))
-                (set! *vnode* vnode)
+            (do (reset! state-ref (get-initial-state *props*))
                 (set! *state* @state-ref)
                 (aset *vnode* index-comp-state *state*))
             (do (set! *state* nil)
