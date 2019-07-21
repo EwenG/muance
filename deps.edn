@@ -1,12 +1,11 @@
 {:paths ["src" "resources"]
- :deps {org.clojure/clojure {:mvn/version "1.9.0"}
-        org.clojure/tools.logging {:mvn/version "0.4.1"}
-        muance/muance-aot {:mvn/version "0.0.1-SNAPSHOT"}}
- :aliases {:cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.10.339"}
+ :deps {org.clojure/clojure {:mvn/version "1.10.1"}
+        org.clojure/tools.logging {:mvn/version "0.4.1"}}
+ :aliases {:cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.10.520"}
                                org.clojure/test.check {:mvn/version "0.9.0"}}}
            :dev {:extra-paths ["test" "target/classes"]
                  :extra-deps {ch.qos.logback/logback-classic {:mvn/version "1.2.3"}}}
            :build {:extra-deps {badigeon/badigeon {:git/url "git@github.com:EwenG/badigeon.git"
-                                                   :sha "2aacfc23f1f332d91575041a9df35436007277e9"
-                                                   :tag "0.0.2"}}
+                                                   :sha "db25a8f7053dec65afeb7fb0d1a5351dcdbe78bd"
+                                                   :tag "0.0.8"}}
                    :extra-paths ["build"]}}}
