@@ -28,7 +28,7 @@
   []
   (assert (not (nil? muance.diff/*vnode*))
           (str "muance.core/key was called outside of render loop"))
-  (aget muance.diff/*vnode* muance.diff/index-key))
+  (.-key muance.diff/*vnode*))
 
 ;; Useful to systematically execute an action on the DOM after it has been updated.
 (defn post-render
@@ -37,7 +37,7 @@
   (assert (not (nil? muance.diff/*vnode*))
           (str "muance.core/post-render was called outside of render loop"))
   (-> (muance.diff/get-render-queue muance.diff/*vnode*)
-      (aget muance.diff/index-render-queue-post-render-hooks)
+      (.-postRenderHooks)
       (.add f)))
 
 (defmacro with-post-render
@@ -65,7 +65,7 @@
   []
   (assert (not (nil? muance.diff/*vnode*))
           (str "muance.core/parent-node was called outside of render loop"))
-  (when-let [p-vnode (aget muance.diff/*vnode* muance.diff/index-parent-vnode)]
+  (when-let [p-vnode (.-parentVnode muance.diff/*vnode*)]
     (muance.diff/parent-node p-vnode)))
 
 (defn get
@@ -89,17 +89,19 @@
           (str "muance.core/set was called outside of render loop"))
   (muance.diff/unset-user-data k))
 
-;;;;
-
 (defn patch
   "Patch a vtree using component. The optional third argument is the component props."
   ([vtree component]
    (patch vtree component muance.diff/no-props-flag))
   ([vtree component props]
    (let [render-queue (vtree/render-queue vtree)
-         render-queue-fn (aget render-queue muance.diff/index-render-queue-fn)]
-     (render-queue-fn #js [(vtree/render-queue vtree) props component
-                           (vtree/vnode vtree) -1 muance.diff/*post-render-fn*]))))
+         render-queue-fn (.-renderQueueFn render-queue)]
+     (render-queue-fn #js {:renderQueue (vtree/render-queue vtree)
+                           :props props
+                           :compFn component
+                           :vnode (vtree/vnode vtree)
+                           :depth -1
+                           :postRenderFn muance.diff/*post-render-fn*}))))
 
 (defn state []
   (assert (not (nil? muance.diff/*vnode*)) (str "muance.core/state was called outside of render loop"))

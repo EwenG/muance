@@ -2,14 +2,6 @@
   (:require [goog.object :as o] 
             [muance.diff :as diff]))
 
-(def vnode-keys [:typeid :parent :node :component :chidren-count :children
-                 :attrs :user-data :unmount :remove-hook :key :key-moved :keyed-next-vnode
-                 :keymap :keymap-invalid])
-(def comp-keys (-> vnode-keys (assoc 2 :comp-data) (assoc 3 :props) (assoc 6 :state)))
-(def vnode-keys-text [:typeid :parent :node :text])
-(def comp-data-keys [:component-name :state-ref :svg-namespace :index-in-parent
-                     :component-depth :dirty-flag :rendered-flag])
-
 (deftype Parent [typeid])
 (deftype Component [typeid])
 (deftype KeyedNextVnode [typeid])
@@ -34,47 +26,65 @@
 (defn with-namespace [vnode-map vnode]
   (if (diff/component? vnode)
     vnode-map
-    (let [node (aget vnode diff/index-node)]
+    (let [node (.-nodeOrCompData vnode)]
       (assoc vnode-map :namespaceURI (.-namespaceURI node)))))
 
 (defn format-comp-data [comp-data]
-  (let [l (.-length comp-data)]
-    (loop [m (transient {})
-           i 0]
-      (if (< i l)
-        (recur (assoc! m (get comp-data-keys i) (aget comp-data i))
-               (inc i))
-        (persistent! m)))))
+  {:compDataName (.-compDataName comp-data)
+   :compDataStateRef (.-compDataStateRef comp-data)
+   :compDataSvgNamespace (.-compDataSvgNamespace comp-data)
+   :compDataIndexInParent (.-compDataIndexInParent comp-data)
+   :compDataDepth (.-compDataDepth comp-data)
+   :compDataDirtyFlag (.-compDataDirtyFlag comp-data)
+   :compDataRenderedFlag (.-compDataRenderedFlag comp-data)})
 
 (defn format-vnode [vnode]
   (when vnode
-    (let [vnode-keys (cond (= 0 (aget vnode diff/index-typeid))
-                           vnode-keys-text
-                           (diff/component? vnode)
-                           comp-keys
-                           :else vnode-keys)
-          l (.-length vnode)]
-      (loop [m (transient {})
-             i 0]
-        (if (< i l)
-          (let [val (cond (= i diff/index-parent-vnode)
-                          (when-let [p (aget vnode diff/index-parent-vnode)]
-                            (->Parent (aget p diff/index-typeid)))
-                          (and (not (diff/component? vnode)) (= i diff/index-component))
-                          (when-let [c (aget vnode diff/index-component)]
-                            (->Component (aget c diff/index-typeid)))
-                          (= i diff/index-key-next-vnode)
-                          (when-let [node (aget vnode diff/index-key-next-vnode)]
-                            (->KeyedNextVnode (aget node diff/index-typeid)))
-                          (= i diff/index-keymap)
-                          (when-let [keymap (aget vnode diff/index-keymap)]
-                            (into #{} (o/getKeys keymap)))
-                          (and (diff/component? vnode) (= i diff/index-comp-data))
-                          (format-comp-data (aget vnode i))
-                          :else (aget vnode i))]
-            (recur (assoc! m (get vnode-keys i) val)
-                   (inc i)))
-          (persistent! m))))))
+    (cond (= 0 (.-typeid vnode))
+          {:typeid (.-typeid vnode)
+           :parentVnode (when-let [p (.-parentVnode vnode)]
+                          (->Parent (.-typeid p)))
+           :nodeOrCompData (.-nodeOrCompData vnode)
+           :text (.-text vnode)}
+          (diff/component? vnode)
+          {:typeid (.-typeid vnode)
+           :parentVnode (when-let [p (.-parentVnode vnode)]
+                          (->Parent (.-typeid p)))
+           :nodeOrCompData (format-comp-data (.-nodeOrCompData vnode))
+           :componentOrCompProps (.-componentOrCompProps vnode)
+           :childrenCount (.-childrenCount vnode)
+           :children (.-children vnode)
+           :attrsOrCompState (.-attrsOrCompState vnode)
+           :userData (.-userData vnode)
+           :unmount (.-unmount vnode)
+           :removeHook (.-removeHook vnode)
+           :key (.-key vnode)
+           :keyMoved (.-keyMoved vnode)
+           :keyNextVnode (when-let [node (.-keyNextVnode vnode)]
+                           (->KeyedNextVnode (.-typeid node)))
+           :keymap (when-let [keymap (.-keymap vnode)]
+                     (into #{} (o/getKeys keymap)))
+           :keymapInvalid (.-keymapInvalid vnode)}
+          :else
+          {:typeid (.-typeid vnode)
+           :parentVnode (when-let [p (.-parentVnode vnode)]
+                          (->Parent (.-typeid p)))
+           :nodeOrCompData (.-nodeOrCompData vnode)
+           :componentOrCompProps (when-let [c (.-componentOrCompProps vnode)]
+                                   (->Component (.-typeid c)))
+           :childrenCount (.-childrenCount vnode)
+           :children (.-children vnode)
+           :attrsOrCompState (.-attrsOrCompState vnode)
+           :userData (.-userData vnode)
+           :unmount (.-unmount vnode)
+           :removeHook (.-removeHook vnode)
+           :key (.-key vnode)
+           :keyMoved (.-keyMoved vnode)
+           :keyNextVnode (when-let [node (.-keyNextVnode vnode)]
+                           (->KeyedNextVnode (.-typeid node)))
+           :keymap (when-let [keymap (.-keymap vnode)]
+                     (into #{} (o/getKeys keymap)))
+           :keymapInvalid (.-keymapInvalid vnode)})))
 
 (declare format-vnodes)
 
@@ -91,36 +101,57 @@
 (defn format-vnodes [vnode]
   (let [vnode-map (format-vnode vnode)
         vnode-map (with-namespace vnode-map vnode)]
-    (if (= 0 (get vnode-map diff/index-typeid))
+    (if (= 0 (.-typeid vnode-map))
       vnode-map
       (if (contains? vnode-map :children)
         (update-in vnode-map [:children] format-children)
         vnode-map))))
 
-(defn format-depth [dirty-comps]
+(defn format-vtree [vtree]
+  (when vtree
+    (format-vnodes (.-vnode vtree))))
+
+(defn format-dirty-comp [dirty-comp]
+  (when dirty-comp
+    {:postRenderFn (.-postRenderFn dirty-comp)
+     :props (.-props dirty-comp)
+     :compFn (.-compFn dirty-comp)
+     :vnode (.-vnode dirty-comp)}))
+
+(defn format-dirty-comps-at-depth [dirty-comps]
   (when dirty-comps
     (let [l (.-length dirty-comps)]
       (loop [arr (transient [])
              i 0]
         (if (< i l)
-          (recur
-           (-> arr
-               (conj! (aget dirty-comps i))
-               (conj! (aget dirty-comps (inc i)))
-               (conj! (format-vnodes (aget dirty-comps (+ i 2)))))
-           (+ i 3))
+          (let [dirty-comp (aget dirty-comps i)]
+            (recur
+             (conj! arr (format-dirty-comp dirty-comp))
+             (inc i)))
           (persistent! arr))))))
 
-(defn format-vtree [vtree]
-  (when vtree
-    (format-vnodes (.-vnode vtree))))
+(defn format-dirty-comps [dirty-comps]
+  (when dirty-comps
+    (let [l (.-length dirty-comps)]
+      (loop [arr (transient [])
+             i 0]
+        (if (< i l)
+          (if (= i 0)
+            (recur
+             (conj! arr (format-dirty-comp (aget dirty-comps i)))
+             (inc i))
+            (recur
+             (conj! arr (format-dirty-comps-at-depth (aget dirty-comps i)))
+             (inc i)))
+          (persistent! arr))))))
 
 (defn format-render-queue [vtree]
   (when-let [render-queue (.-render-queue vtree)]
-    (let [l (.-length render-queue)]
-      (loop [arr (transient [])
-             i 0]
-        (cond (< i diff/index-render-queue-offset)
-              (recur (conj! arr (aget render-queue i)) (inc i))
-              (< i l) (recur (conj! arr (format-depth (aget render-queue i))) (inc i))
-              :else (persistent! arr))))))
+    {:renderQueueFn (.-renderQueueFn render-queue)
+     :synchronous (.-synchronous render-queue)
+     :processingFlag (.-processingFlag render-queue)
+     :pendingFlag (.-pendingFlag render-queue)
+     :dirtyFlag (.-dirtyFlag render-queue)
+     :firstRenderPromise (.-firstRenderPromise render-queue)
+     :postRenderHooks (.-postRenderHooks render-queue)
+     :dirtyComps (format-dirty-comps (.-dirtyComps render-queue))}))

@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [atom])
   (:require [muance.context :as context]))
 
-(deftype LocalStateAtom [^:mutable state watches ^:mutable muance-watcher component-data]
+(deftype LocalStateAtom [^:mutable state watches ^:mutable muance-watcher componentData]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -18,7 +18,7 @@
   IWatchable
   (-notify-watches [this oldval newval]
     (when muance-watcher
-      (muance-watcher component-data newval))
+      (muance-watcher componentData newval))
     (when-not (nil? watches)
       (doseq [[key f] watches]
         (f key this oldval newval))))

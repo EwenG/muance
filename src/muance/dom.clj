@@ -37,9 +37,9 @@
               clj-var (resolve var)]
           (cond (::m/tag (meta clj-var))
                 (compile-element-macro env (::m/tag (meta clj-var)) nil (rest form))
-                (= #'text clj-var) `(~'muance.dom/text-node (cljs.core/str ~@(rest form)))
+                (= #'text clj-var) `(~'muance.internal.dom/text-node (cljs.core/str ~@(rest form)))
                 :else form))
-        (string? form) `(~'muance.dom/text-node ~form)
+        (string? form) `(~'muance.internal.dom/text-node ~form)
         :else form))
 
 ;; Not used anymore. We use a simplified, less precise logic now
@@ -92,24 +92,24 @@
     (if (every? (partial static? env) class)
       (if (some symbol? class)
         (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
-          `(~'muance.dom/prop-static "className" (cljs.core/str ~@classes-with-spaces)))
-        `(~'muance.dom/prop-static
+          `(~'muance.internal.dom/prop-static "className" (cljs.core/str ~@classes-with-spaces)))
+        `(~'muance.internal.dom/prop-static
           "className" ~(reduce #(if (nil? %1) (str %2) (str %1 " " %2)) nil class)))
       (let [classes-with-spaces (-> class (interleave (repeat " ")) butlast)]
-        `(~'muance.dom/prop "className" (cljs.core/str ~@classes-with-spaces))))
+        `(~'muance.internal.dom/prop "className" (cljs.core/str ~@classes-with-spaces))))
     (if (static? env class)
-      `(~'muance.dom/prop-static "className" ~class)
-      `(~'muance.dom/prop "className" ~class))))
+      `(~'muance.internal.dom/prop-static "className" ~class)
+      `(~'muance.internal.dom/prop "className" ~class))))
 
 (defn- style-calls [env style]
   (map (fn [[k v]]
          (if (string/starts-with? (str k) ":--")
            (if (static? env v)
-             `(~'muance.dom/style-custom-static ~(as-str k) ~v)
-             `(~'muance.dom/style-custom ~(as-str k) ~v))
+             `(~'muance.internal.dom/style-custom-static ~(as-str k) ~v)
+             `(~'muance.internal.dom/style-custom ~(as-str k) ~v))
            (if (static? env v)
-             `(~'muance.dom/style-static ~(as-str k) ~v)
-             `(~'muance.dom/style ~(as-str k) ~v))))
+             `(~'muance.internal.dom/style-static ~(as-str k) ~v)
+             `(~'muance.internal.dom/style ~(as-str k) ~v))))
        style))
 
 ;; Wrap event handlers in a var when in dev compilation mode in order to enable the possibility
@@ -127,22 +127,22 @@
     (map (fn [[k f & args]]
            (if (and (static? f) (every? static? args))
              (let [l (count args)]
-               (cond (= 0 l) `(~'muance.dom/on-static-0 ~(as-str k) ~(maybe-wrap-in-var env f))
-                     (= 1 l) `(~'muance.dom/on-static-1 ~(as-str k) ~(maybe-wrap-in-var env f)
+               (cond (= 0 l) `(~'muance.internal.dom/on-static-0 ~(as-str k) ~(maybe-wrap-in-var env f))
+                     (= 1 l) `(~'muance.internal.dom/on-static-1 ~(as-str k) ~(maybe-wrap-in-var env f)
                                ~(nth args 0))
-                     (= 2 l) `(~'muance.dom/on-static-2 ~(as-str k) ~(maybe-wrap-in-var env f)
+                     (= 2 l) `(~'muance.internal.dom/on-static-2 ~(as-str k) ~(maybe-wrap-in-var env f)
                                ~(nth args 0) ~(nth args 1))
-                     :else `(~'muance.dom/on-static-3 ~(as-str k) ~(maybe-wrap-in-var env f)
+                     :else `(~'muance.internal.dom/on-static-3 ~(as-str k) ~(maybe-wrap-in-var env f)
                              ~(nth args 0)
                              ~(nth args 1)
                              ~(nth args 2))))
              (let [l (count args)]
-               (cond (= 0 l) `(~'muance.dom/on-0 ~(as-str k) ~(maybe-wrap-in-var env f))
-                     (= 1 l) `(~'muance.dom/on-1 ~(as-str k) ~(maybe-wrap-in-var env f)
+               (cond (= 0 l) `(~'muance.internal.dom/on-0 ~(as-str k) ~(maybe-wrap-in-var env f))
+                     (= 1 l) `(~'muance.internal.dom/on-1 ~(as-str k) ~(maybe-wrap-in-var env f)
                                ~(nth args 0))
-                     (= 2 l) `(~'muance.dom/on-2 ~(as-str k) ~(maybe-wrap-in-var env f)
+                     (= 2 l) `(~'muance.internal.dom/on-2 ~(as-str k) ~(maybe-wrap-in-var env f)
                                ~(nth args 0) ~(nth args 1))
-                     :else `(~'muance.dom/on-3 ~(as-str k) ~(maybe-wrap-in-var env f)
+                     :else `(~'muance.internal.dom/on-3 ~(as-str k) ~(maybe-wrap-in-var env f)
                              ~(nth args 0)
                              ~(nth args 1)
                              ~(nth args 2))))))
@@ -158,31 +158,31 @@
               (= k ::m/on)  (into calls (on-calls env v))
               (and (= tag "input") (= k :value))
               (conj calls (if (static? env v)
-                            `(~'muance.dom/prop-static "value" ~v)
-                            `(~'muance.dom/input-value ~v)))
+                            `(~'muance.internal.dom/prop-static "value" ~v)
+                            `(~'muance.internal.dom/input-value ~v)))
               (string/starts-with? (str k) ":xlink")
               (conj calls (if (static? env v)
-                            `(~'muance.dom/attr-ns-static muance.dom/xlink-ns ~(as-str k) ~v)
-                            `(~'muance.dom/attr-ns muance.dom/xlink-ns ~(as-str k) ~v)))
+                            `(~'muance.internal.dom/attr-ns-static muance.dom/xlink-ns ~(as-str k) ~v)
+                            `(~'muance.internal.dom/attr-ns muance.dom/xlink-ns ~(as-str k) ~v)))
               (string/starts-with? (str k) ":xml")
               (conj calls (if (static? env v)
-                            `(~'muance.dom/attr-ns-static muance.dom/xml-ns ~(as-str k) ~v)
-                            `(~'muance.dom/attr-ns muance.dom/xml-ns ~(as-str k) ~v)))
+                            `(~'muance.internal.dom/attr-ns-static muance.dom/xml-ns ~(as-str k) ~v)
+                            `(~'muance.internal.dom/attr-ns muance.dom/xml-ns ~(as-str k) ~v)))
               (string/starts-with? (str k) ":data-")
               (conj calls (if (static? env v)
-                            `(~'muance.dom/attr-ns-static nil ~(as-str k) ~v)
-                            `(~'muance.dom/attr-ns nil ~(as-str k) ~v)))
+                            `(~'muance.internal.dom/attr-ns-static nil ~(as-str k) ~v)
+                            `(~'muance.internal.dom/attr-ns nil ~(as-str k) ~v)))
               (string/starts-with? (str k) ":aria-")
               (conj calls (if (static? env v)
-                            `(~'muance.dom/attr-ns-static nil ~(as-str k) ~v)
-                            `(~'muance.dom/attr-ns nil ~(as-str k) ~v)))
+                            `(~'muance.internal.dom/attr-ns-static nil ~(as-str k) ~v)
+                            `(~'muance.internal.dom/attr-ns nil ~(as-str k) ~v)))
               (= "muance.attribute" (namespace k))
               (conj calls (if (static? env v)
-                            `(~'muance.dom/attr-ns-static nil ~(as-str k) ~v)
-                            `(~'muance.dom/attr-ns nil ~(as-str k) ~v)))
+                            `(~'muance.internal.dom/attr-ns-static nil ~(as-str k) ~v)
+                            `(~'muance.internal.dom/attr-ns nil ~(as-str k) ~v)))
               :else (conj calls (if (static? env v)
-                                  `(~'muance.dom/prop-static ~(as-str k) ~v)
-                                  `(~'muance.dom/prop ~(as-str k) ~v)))))
+                                  `(~'muance.internal.dom/prop-static ~(as-str k) ~v)
+                                  `(~'muance.internal.dom/prop ~(as-str k) ~v)))))
           [] attrs))
 
 (defn- with-svg-namespace [tag body]
@@ -220,7 +220,7 @@
   "Creates a text node. The text node value is the string concatenation of the text macro 
   arguments."
   [& text]
-  `(~'muance.dom/text-node (cljs.core/str ~@text)))
+  `(~'muance.internal.dom/text-node (cljs.core/str ~@text)))
 
 (defmacro make-element-macro
   "Defines a new HTML element macro with the provided tag. The newly defined HTML element macro

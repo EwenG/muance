@@ -3,191 +3,12 @@
             [muance.vtree :as vtree]
             [muance.context :as context]
             [muance.core :as core]
-            [goog.object :as o]))
+            [goog.object :as o]
+            [muance.internal.dom]))
 
 (def ^:const svg-ns "http://www.w3.org/2000/svg")
 (def ^:const xml-ns "http://www.w3.org/XML/1998/namespace")
 (def ^:const xlink-ns "http://www.w3.org/1999/xlink")
-
-(defn- new-text-vnode [element text]
-     #js [0 diff/*vnode* element text])
-
-(defn- text-node [t]
-  (let [vnode-index (or (aget diff/*vnode* diff/index-children-count) 0)
-        parent-children (or (aget diff/*vnode* diff/index-children) #js [])
-        prev (aget parent-children vnode-index)
-        prev-key (when prev (aget prev diff/index-key))
-        prev-typeid (when prev (aget prev diff/index-typeid))]
-    (aset diff/*vnode* diff/index-children-count (inc vnode-index))
-    (when (nil? (aget diff/*vnode* diff/index-children))
-      (aset diff/*vnode* diff/index-children parent-children))
-    (if (= 0 prev-typeid)
-      (when (not= (aget prev diff/index-text) t)
-        (aset prev diff/index-text t)
-        (o/set (aget prev diff/index-node) "nodeValue" t))
-      (let [vnode (new-text-vnode (.createTextNode js/document t) t)]
-        (diff/insert-vnode-before
-         diff/*vnode* vnode (aget parent-children vnode-index) vnode-index)
-        (aset parent-children vnode-index vnode)
-        (if prev-key
-          (diff/remove-vnode-key prev)
-          (when prev (diff/remove-vnode prev)))))))
-
-(defn handle-event-handler [key prev-handler handler]
-  (let [node (aget diff/*vnode* diff/index-node)]
-    (when prev-handler
-      (.removeEventListener node key prev-handler false))
-    (when handler
-      (.addEventListener node key handler false)))
-  handler)
-
-(defn- set-attribute [ns key val]
-  (let [node (aget diff/*vnode* diff/index-node)]
-    (if (nil? val)
-      (.removeAttribute node key)
-      (if (nil? ns)
-        (.setAttribute node key val)
-        (.setAttributeNS node ns key val)))))
-
-(defn- set-property [key val]
-  (let [node (aget diff/*vnode* diff/index-node)]
-    (o/set node key val)))
-
-(defn- set-input-value [val]
-  (let [node (aget diff/*vnode* diff/index-node)]
-    (when (not= (o/get node "value") val)
-      (o/set node "value" val))))
-
-(defn- set-style [key val]
-  (let [node (aget diff/*vnode* diff/index-node)]
-    (o/set (.-style node) key val)))
-
-(defn- set-style-custom [key val]
-  (let [node (aget diff/*vnode* diff/index-node)]
-    (.setProperty (.-style node) key val)))
-
-(defn make-handler-0 [f]
-  (when (fn? f)
-    (let [state-ref diff/*handlers-state-ref*]
-      (fn [e] (f e state-ref)))))
-
-(defn- on-0 [key f]
-  (when (diff/compare-handlers-0 f)
-    (diff/set-handler-0
-     (handle-event-handler key diff/*handlers-prev* (make-handler-0 f)) f))
-  (diff/inc-attrs 2))
-
-(defn- on-static-0 [key f]
-  (when (diff/compare-handlers-static f)
-    (handle-event-handler key nil (make-handler-0 f))))
-
-(defn make-handler-1 [f arg1]
-  (when (fn? f)
-    (let [state-ref diff/*handlers-state-ref*]
-      (fn [e] (f e state-ref arg1)))))
-
-(defn- on-1 [key f arg1]
-  (when (diff/compare-handlers-1 f arg1)
-    (diff/set-handler-1
-     (handle-event-handler key diff/*handlers-prev* (make-handler-1 f arg1)) f arg1))
-  (diff/inc-attrs 3))
-
-(defn- on-static-1 [key f arg1]
-  (when (diff/compare-handlers-static f)
-    (handle-event-handler key nil (make-handler-1 f arg1))))
-
-(defn make-handler-2 [f arg1 arg2]
-  (when (fn? f)
-    (let [state-ref diff/*handlers-state-ref*]
-      (fn [e] (f e state-ref arg1 arg2)))))
-
-(defn- on-2 [key f arg1 arg2]
-  (when (diff/compare-handlers-2 f arg1 arg2)
-    (diff/set-handler-2
-     (handle-event-handler key diff/*handlers-prev* (make-handler-2 f arg1 arg2))
-     f arg1 arg2))
-  (diff/inc-attrs 4))
-
-(defn- on-static-2 [key f arg1 arg2]
-  (when (diff/compare-handlers-static f)
-    (handle-event-handler key nil (make-handler-2 f arg1 arg2))))
-
-(defn make-handler-3 [f arg1 arg2 arg3]
-  (when (fn? f)
-    (let [state-ref diff/*handlers-state-ref*]
-      (fn [e] (f e state-ref arg1 arg2 arg3)))))
-
-(defn- on-3 [key f arg1 arg2 arg3]
-  (when (diff/compare-handlers-3 f arg1 arg2 arg3)
-    (diff/set-handler-3
-     (handle-event-handler key diff/*handlers-prev* (make-handler-3 f arg1 arg2 arg3))
-     f arg1 arg2 arg3))
-  (diff/inc-attrs 5))
-
-(defn- on-static-3 [key f arg1 arg2 arg3]
-  (when (diff/compare-handlers-static f)
-    (handle-event-handler key nil (make-handler-3 f arg1 arg2 arg3))))
-
-(defn nil-or-string [v]
-  (if (nil? v) nil (str v)))
-
-(defn- attr-ns [ns key val]
-  (let [val (nil-or-string val)
-        changed? (diff/compare-attrs val)]
-    (when changed?
-      (set-attribute ns key val)
-      (diff/set-attr val))
-    (diff/inc-attrs 1)))
-
-(defn- attr-ns-static [ns key val]
-  (when (and (> diff/*new-node* 0) (not (nil? val)))
-    (set-attribute ns key (str val))))
-
-(defn- prop [key val]
-  (if (> diff/*svg-namespace* 0)
-    (let [val (nil-or-string val)]
-      (when (diff/compare-attrs val)
-        (set-attribute nil key val)
-        (diff/set-attr val)))
-    (when (diff/compare-attrs val)
-      (set-property key val)
-      (diff/set-attr val)))
-  (diff/inc-attrs 1))
-
-(defn- prop-static [key val]
-  (when (and (> diff/*new-node* 0) (not (nil? val)))
-    (if (> diff/*svg-namespace* 0)
-      (set-attribute nil key (str val))
-      (set-property key val))))
-
-(defn- input-value [val]
-  (let [val (nil-or-string val)]
-    (when (diff/compare-attrs val)
-      (set-input-value val)
-      (diff/set-attr val))
-    (diff/inc-attrs 1)))
-
-(defn- style [key val]
-  (let [val (str val)]
-    (when (diff/compare-attrs val)
-      (set-style key val)
-      (diff/set-attr val))
-    (diff/inc-attrs 1)))
-
-(defn- style-static [key val]
-  (when (and (> diff/*new-node* 0) (not (nil? val)))
-    (set-style key (str val))))
-
-(defn- style-custom [key val]
-  (let [val (str val)]
-    (when (diff/compare-attrs val)
-      (set-style-custom key val)
-      (diff/set-attr val))
-    (diff/inc-attrs 1)))
-
-(defn- style-custom-static [key val]
-  (when (and (> diff/*new-node* 0) (not (nil? val)))
-    (set-style-custom key (str val))))
 
 ;; An empty comp useful to unmount vtree
 (core/defcomp empty-comp [])
@@ -201,9 +22,9 @@
   (core/remove [vtree]
     (let [vnode (vtree/vnode vtree)
           fragment (.createDocumentFragment js/document)]
-      (when-let [comp (aget vnode diff/index-children 0)]
+      (when-let [comp (aget (.-children vnode) 0)]
         (diff/insert-vnode-before* fragment comp nil))
-      (aset vnode diff/index-node fragment)
+      (set! (.-nodeOrCompData vnode) fragment)
       (o/remove diff/roots (vtree/id vtree))))
   (core/unmount [this]
     (core/patch this empty-comp))
@@ -212,11 +33,11 @@
             "Cannot call muance.core/refresh inside render loop")
     (let [vnode (vtree/vnode vtree)
           the-render-queue (vtree/render-queue vtree)
-          children (aget vnode diff/index-children)]
+          children (.-children vnode)]
       (when-let [comp (aget children 0)]
         (diff/patch-impl the-render-queue vnode comp
                          (diff/get-comp-render-fn comp)
-                         (aget comp diff/index-comp-props)
+                         (.-componentOrCompProps comp)
                          true)
         (diff/process-post-render-hooks the-render-queue)))))
 
@@ -241,86 +62,120 @@
 (extend-type js/Node
   context/Context
   (context/insert-before [parent-node vnode ref-node]
-    (.insertBefore parent-node (aget vnode diff/index-node) ref-node))
+    (.insertBefore parent-node (.-nodeOrCompData vnode) ref-node))
   (context/remove-node [parent-node node]
     (.removeChild parent-node node))
   core/VTreeInsert
   (core/insert-before [ref-node vtree]
     (let [parent-node (.-parentNode ref-node)
           vnode (vtree/vnode vtree)]
-      (when-let [comp (aget vnode diff/index-children 0)]
+      (when-let [comp (aget (.-children vnode) 0)]
         (diff/insert-vnode-before* parent-node comp ref-node))
-      (aset vnode diff/index-node parent-node)
+      (set! (.-nodeOrCompData vnode) parent-node)
       (o/set diff/roots (vtree/id vtree) vtree)))
   (core/append-child [parent-node vtree]
     (let [vnode (vtree/vnode vtree)]
-      (when-let [comp (aget vnode diff/index-children 0)]
+      (when-let [comp (aget (.-children vnode) 0)]
         (diff/insert-vnode-before* parent-node comp nil))
-      (aset vnode diff/index-node parent-node)
+      (set! (.-nodeOrCompData vnode) parent-node)
       (o/set diff/roots (vtree/id vtree) vtree))))
 
 (defn- new-root-vnode []
-  #js [nil nil (.createDocumentFragment js/document) nil 0 #js []])
+  #js {:typeid nil
+       :parentVnode nil
+       ;; node or component field
+       :nodeOrCompData (.createDocumentFragment js/document)
+       ;; node or component field
+       :componentOrCompProps nil
+       :childrenCount 0
+       :children #js []
+       ;; node or component field
+       :attrsOrCompState nil
+       :userData nil
+       ;; Unmount is stored on the node since it must be called when one of the parents
+       ;; of the node is removed
+       :unmount nil
+       :removeHook nil
+       :key nil
+       ;; A slot which stores one of two flags:
+       ;; - moved-flag
+       ;; - moving-flag
+       ;; - new-flag
+       ;; See the documentation for these two flags for more details
+       :keyMoved nil
+       ;; keep track of the vnode sibling in order to reorder keyed vnodes during child
+       ;; nodes reconciliation
+       :keyNextVnode nil
+       :keymap nil
+       ;; When a keyed node is removed, the keymap is marked as invalid. Invalid keymaps
+       ;; are cleaned when the close function of the node is called
+       :keymapInvalid nil})
 
 (defn- handle-component-update [in]
-  (let [render-queue (aget in 0)
+  (let [render-queue (.-renderQueue in)
         _ (assert (not (identical? render-queue diff/*render-queue*)))
-        props (aget in 1)
-        comp-fn (aget in 2)
-        vnode (aget in 3)
+        props (.-props in)
+        comp-fn (.-compFn in)
+        vnode (.-vnode in)
         ;; depth == -1 means this was a call to muance.core/patch. In this case, the vnode is
         ;; the vtree vnode. We don't directly pass the vnode of the component at depth 0 because
         ;; it is nil before the firs rendering and this would cause potential concurrency
         ;; (multiple threads) problems
-        depth (aget in 4)
-        post-render-fn (aget in 5)
-        synchronous? (aget render-queue diff/index-render-queue-synchronous)
-        processing-flag (aget render-queue diff/index-render-queue-processing-flag)
-        dirty-flag (aget render-queue diff/index-render-queue-dirty-flag)
-        first-render-promise (aget render-queue diff/index-render-queue-first-render-promise)]
+        depth (.-depth in)
+        post-render-fn (.-postRenderFn in)
+        synchronous? (.-synchronous render-queue)
+        processing-flag (.-processingFlag render-queue)
+        dirty-flag (.-dirtyFlag render-queue)
+        first-render-promise (.-firstRenderPromise render-queue)]
     ;; if this is the first render
     (if (not first-render-promise)
       ;; first render is synchronous
       (do
         (diff/patch-impl render-queue vnode nil comp-fn props false)
         (diff/process-post-render-hooks render-queue)
-        (aset render-queue diff/index-render-queue-first-render-promise true))
+        (set! (.-firstRenderPromise render-queue) true))
       ;; if the patch data is coming from a call to the patch fn
       (do
-        (if (= depth -1) 
-          (if-let [dirty-comps (aget render-queue diff/index-render-queue-offset)]
+        (if (= depth -1)
+          (if-let [dirty-comps (aget (.-dirtyComps render-queue) 0)]
             (do
-              (aset dirty-comps 0 post-render-fn)
-              (aset dirty-comps 1 props)
-              (aset dirty-comps 2 comp-fn)
-              (aset dirty-comps 3 vnode))
-            (aset render-queue diff/index-render-queue-offset
-                    #js [post-render-fn props comp-fn vnode]))
-          (let [comp-data (aget vnode diff/index-comp-data)]
-            (when-not (identical? dirty-flag (aget comp-data diff/index-comp-data-dirty-flag))
-              (if-let [dirty-comps (aget render-queue (+ (inc depth) diff/index-render-queue-offset))]
-                (do (.push dirty-comps post-render-fn)
-                    (.push dirty-comps props)
-                    (.push dirty-comps comp-fn)
-                    (.push dirty-comps vnode))
-                (aset render-queue (+ (inc depth) diff/index-render-queue-offset)
-                        #js [post-render-fn props comp-fn vnode]))
-              (aset comp-data diff/index-comp-data-dirty-flag dirty-flag))))
-        (aset render-queue diff/index-render-queue-pending-flag true)
+              (set! (.-postRenderFn dirty-comps) post-render-fn)
+              (set! (.-props dirty-comps) props)
+              (set! (.-compFn dirty-comps) comp-fn)
+              (set! (.-vnode dirty-comps) vnode))
+            (do
+              (set! (.-dirtyComps render-queue) #js [#js {:postRenderFn post-render-fn
+                                                          :props props
+                                                          :compFn comp-fn
+                                                          :vnode vnode}])))
+          (let [comp-data (.-nodeOrCompData vnode)]
+            (when-not (identical? dirty-flag (.-compDataDirtyFlag comp-data))
+              (if-let [dirty-comps (aget (.-dirtyComps render-queue) (inc depth))]
+                (do (.push dirty-comps #js {:postRenderFn post-render-fn
+                                            :props props
+                                            :compFn comp-fn
+                                            :vnode vnode}))
+                (aset (.-dirtyComps render-queue) (inc depth)
+                      #js [#js {:postRenderFn post-render-fn
+                                :props props
+                                :compFn comp-fn
+                                :vnode vnode}]))
+              (set! (.-compDataDirtyFlag comp-data) dirty-flag))))
+        (set! (.-pendingFlag render-queue) true)
         (if synchronous?
           (binding [diff/*rendered-flag* (js/Object.)]
             (diff/process-render-queue render-queue render-queue)
             (diff/process-post-render-hooks render-queue)
-            (aset render-queue diff/index-render-queue-processing-flag false)
-            (aset render-queue diff/index-render-queue-dirty-flag (js/Object.)))
-          (when-not (aget render-queue diff/index-render-queue-processing-flag)
-            (aset render-queue diff/index-render-queue-processing-flag true)
+            (set! (.-processingFlag render-queue) false)
+            (set! (.-dirtyFlag render-queue) (js/Object.)))
+          (when-not (.-processingFlag render-queue)
+            (set! (.-processingFlag render-queue) true)
             (.requestAnimationFrame
              js/window 
              (fn []
                (binding [diff/*rendered-flag* (js/Object.)]
-                 (aset render-queue diff/index-render-queue-processing-flag false)
-                 (aset render-queue diff/index-render-queue-dirty-flag (js/Object.))
+                 (set! (.-processingFlag render-queue) false)
+                 (set! (.-dirtyFlag render-queue) (js/Object.))
                  (diff/process-render-queue render-queue render-queue)
                  (diff/process-post-render-hooks render-queue))))))))))
 
@@ -330,15 +185,34 @@
   ([{:keys [synchronous? post-render-hook]}]
    (let [vt (->DOMVTree (swap! diff/vtree-ids inc)
                         (new-root-vnode)
-                        ;; render-queue-fn + synchronous + processing flag + pending flag +
-                        ;; dirty-flag + first-render-promise + post-render-hooks +
-                        ;; dirty-comps (the rest of the array)
-                        #js [#'handle-component-update synchronous? false false (js/Object.)
-                             false #js [] #js[]])]
+                        #js {:renderQueueFn #'handle-component-update
+                             :synchronous synchronous?
+                             ;; Whether the rendering thread is still rendering dirty components
+                             ;; or not. Must only be modified by the batching thread
+                             :processingFlag false
+                             ;; Whether dirty comps have been enqueued by the batching thread,
+                             ;; waiting to be processed by the rendering thread. Must only be
+                             ;; modified by the batching thread.
+                             :pendingFlag false
+                             ;; A flag used to know when a component has already be enqueued by
+                             ;; the batching thread. Used to avoid to enqueue a component twice.
+                             ;; Must only be modified by the batching thread. This flag is set on
+                             ;; the component data under the compDataDirtyFlag key
+                             :dirtyFlag #js {}
+                             :firstRenderPromise false
+                             ;; The prost render hooks. Must only be modified by the rendering thread.
+                             :postRenderHooks #js []
+                             ;; A component is enqueued by the batching thread in this array when it
+                             ;; becomes dirty. Dirty components are reset to nil before beeing passed
+                             ;; to the rendering thread. The dirty comps used by the rendering thread
+                             ;; are a flat copy (not deep copy !) of the dirty comps. Thus the
+                             ;; batching thread and the rendering thread do not share the same array.
+                             ;; They can both mutate this array.
+                             :dirtyComps #js []})]
      (when post-render-hook
-       (aset (vtree/render-queue vt)
-               diff/index-render-queue-post-render-hooks 0
-               (partial post-render-hook vt)))
+       (-> (vtree/render-queue vt)
+           (.-postRenderHooks)
+           (aset 0 (partial post-render-hook vt))))
      vt)))
 
 (defn set-timeout
@@ -348,8 +222,8 @@
           (str "muance.dom/set-timeout was called outside of render loop"))
   (let [component (if (diff/component? diff/*vnode*)
                     diff/*vnode*
-                    (aget diff/*vnode* diff/index-component))
-        state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
+                    (.-componentOrCompProps diff/*vnode*))
+        state-ref (.-compDataStateRef (.-nodeOrCompData component))]
     (.setTimeout js/window (fn [] (f state-ref)) millis)))
 
 (defn set-interval
@@ -359,7 +233,7 @@
           (str "muance.dom/set-interval was called outside of render loop"))
   (let [component (if (diff/component? diff/*vnode*)
                     diff/*vnode*
-                    (aget diff/*vnode* diff/index-component))
-        state-ref (aget component diff/index-comp-data diff/index-comp-data-state-ref)]
+                    (.-componentOrCompProps diff/*vnode*))
+        state-ref (.-compDataStateRef (.-nodeOrCompData component))]
     (.setInterval js/window (fn [] (f state-ref)) millis)))
 
