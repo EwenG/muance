@@ -2,7 +2,7 @@
   (:require [muance.diff :as diff]
             [muance.vtree :as vtree]
             [muance.context :as context]
-            [muance.core :as core]
+            [muance.core :as core :include-macros true]
             [goog.object :as o]
             [muance.internal.dom]))
 
