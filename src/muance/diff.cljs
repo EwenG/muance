@@ -4,6 +4,72 @@
             [muance.vtree :as vtree]
             [muance.context :as context]))
 
+;; VNodes fields
+;; - typeid
+;; - parentVnode
+;; - nodeOrCompData
+;; - componentOrCompProps
+;; - childrenCounts
+;; - children
+;; - attrsOrCompState
+;; - userData
+;; Unmount is stored on the node since it must be called when one of the parents of the node
+;; is removed
+;; - unmount
+;; - removeHook
+;; - key
+;; A slot which stores one of two flags:
+;;   moved-flag
+;;   moving-flag
+;;   new-flag
+;; See the documentation for these two flags for more details
+;; - keyMoved
+;; Keep track of the vnode sibling in order to reorder keyed vnodes during child nodes
+;; reconciliation
+;; - keyNextVnode
+;; - keymap
+;; When a keyed node is removed, the keymap is marked as invalid. Invalid keymaps are
+;; cleaned when the close function of the node is called
+;; - keymapInvalid
+
+;; - compDataName
+;; - compDataStateRef
+;; - compDataSvgNamespace
+;; index-in-parent is used when rendering a component after its local state has changed.
+;; we must initialize the children-count slot to the same value than index-in-parent
+;; - compDataIndexInParent
+;; the depth of the component is stored to be able to init the component-state var when a
+;; component is re-rendered because of a local state change
+;; - compDataDepth
+;; Not used by the DOM implementation
+;; - (def ^:const index-comp-data-dirty-flag 5)
+;; *render-flag* is put here when the flag has been rendered. This must only be touched by the
+;; rendering thread !
+;; - compDataRenderedFlag
+
+;; - renderQueueFn
+;; Not used by the DOM implementation
+;; - (def ^:const index-render-queue-synchronous 1)
+;; Whether the rendering thread is still rendering dirty components or not. Must only be modified by the batching thread
+;; Not used by the DOM implementation
+;; (def ^:const index-render-queue-processing-flag 2)
+;; Whether dirty comps have been enqueued by the batching thread, waiting to be processed by the rendering thread. Must only be modified by the batching thread.
+;; Not used by the DOM implementation
+;; (def ^:const index-render-queue-pending-flag 3)
+;; A flag used to know when a component has already be enqueued by the batching thread. Used to avoid to enqueue a component twice. Must only be modified by the batching thread. This flag is set on the component data at the index-comp-data-dirty-flag index.
+;; Not used by the DOM implementation
+;; (def ^:const index-render-queue-dirty-flag 4)
+;; Not used by the DOM implementation
+;; (def ^:const index-render-queue-first-render-promise 5)
+;; The post render hooks. Must only be modified by the rendering thread.
+;; - postRenderHooks
+;; The offset of the dirty comps in the rendering-queue. A component is enqueued by the batching thread at the index (+ component-depth index-render-queue-offset). Dirty components are reset to nil before beeing passed to the rendering thread. The dirty comps used by the rendering thread are a flat copy (not deep copy !) of the dirty comps. Thus the batching thread and the rendering thread do not share the same array. They can both mutate this array.
+;; Not used by the DOM implementation
+;; - (def ^:const index-render-queue-offset 7)
+
+
+
+
 (def ^{:dynamic true} *component* nil)
 ;; Whether the current vnode has just been created or not
 (def ^{:dynamic true} *new-node* nil)
