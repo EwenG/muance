@@ -57,7 +57,6 @@ Source code for the examples is in the [examples](https://github.com/EwenG/muanc
 - `(m/patch vtree component)`: Patch the `vtree` using `component`
 - `(m/patch vtree component props)`: Patch the `vtree` using `component`, passing the parameter `props` to `component`
 - `m/defcomp`: Define a component. Use it like `defn`, with the limitation that `defcomp` takes zero or one parameter
-- `(m/hooks component hooks-map)`: Adds [lifecycle hooks](#lifecycle-hooks) to `component` 
 - `(m/vnode)`: Get the current vnode. Must be called inside a render loop.
 - `(m/state)`: Get the local state of the current component. Must be called inside a render loop.
 
@@ -338,8 +337,13 @@ A component's local state value can be modified in an event handler:
 
 The `:muance.core/hooks` [attribute](#attributes) sets a set of lifecycle hooks on a node.
 
-The `(muance.core/hooks component hooks-map)` macro sets a set of lifecycle hooks on a component. `hooks-map` must be a literal map.
-
+Hooks can also be defined on components with the following syntax. Note that the map of hooks must be a literal map:
+```
+(m/defcomp foo-component
+  ::m/hooks {...}
+  []
+  (h/div))
+```
 All nodes and components support the following lifecycle hooks:
 
 #### did-mount
@@ -352,7 +356,10 @@ Parents `did-mount` hooks are called *before* their children's.
 ```
 
 ```
-(m/hooks foo-component {:did-mount (fn [props state])})
+(m/defcomp foo-component
+  ::m/hooks {:did-mount (fn [props state])}
+  []
+  (h/div))
 ```
 
 - `props`: the props of the node's component
@@ -367,7 +374,10 @@ Called before the node or component is updated.
 ```
 
 ```
-(m/hooks foo-component {:will-update (fn [props state])})
+(m/defcomp foo-component
+  ::m/hooks {:will-update (fn [props state])}
+  []
+  (h/div))
 ```
 
 - `props`: the props of the node's component
@@ -382,7 +392,10 @@ Called after the node or component is updated.
 ```
 
 ```
-(m/hooks foo-component {:did-update (fn [props state])})
+(m/defcomp foo-component
+  ::m/hooks {:did-update (fn [props state])}
+  []
+  (h/div))
 ```
 
 - `props`: the props of the node's component
@@ -398,7 +411,10 @@ Parents `will-unmount` hooks are called *after* their children's.
 ```
 
 ```
-(m/hooks foo-component {:will-unmount (fn [props state])})
+(m/defcomp foo-component
+  ::m/hooks {:will-unmount (fn [props state])}
+  []
+  (h/div))
 ```
 
 - `props`: the props of the node's component
@@ -416,7 +432,10 @@ responsability.
 ```
 
 ```
-(m/hooks foo-component {:remove-hooks (fn [rem-node]))})
+(m/defcomp foo-component
+  ::m/hooks {:remove-hooks (fn [rem-node]))}
+  []
+  (h/div))
 ```
 
 - `rem-node`: The DOM node that would normally have been removed by Muance if the hook
@@ -441,7 +460,10 @@ The value returned by `get-initial-state` is used as the initial value of the co
 The local state initial value is `nil` if `get-initial-state` is not defined.
 
 ```
-(m/hooks foo-component {:get-initial-state (fn [props] "initial-state")})
+(m/defcomp foo-component
+  ::m/hooks {:get-initial-state (fn [props] "initial-state")}
+  []
+  (h/div))
 ```
 
 - `props`: the props of the node's component
@@ -452,8 +474,11 @@ Called before the node or component is updated.
 Use `will-receive-props` to update the component's local state in response to props change.
 
 ```
-(m/hooks foo-component {:will-receive-props (fn [prev-props props state-ref]
-                                              (reset! state-ref "state-value"))})
+(m/defcomp foo-component
+  ::m/hooks {:will-receive-props (fn [prev-props props state-ref]
+                                   (reset! state-ref "state-value"))}
+  []
+  (h/div))
 ```
 
 - `prev-props`: the previous props of the node's component
