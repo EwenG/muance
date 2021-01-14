@@ -404,3 +404,9 @@
   (swap! vtree utils/new-vtree)
   (m/append-child (utils/new-root) @vtree)
   (m/patch @vtree comp-prevent-node-removal-f true))
+
+
+(comment
+  (run-tests 'muance.comp-test)
+  )
+

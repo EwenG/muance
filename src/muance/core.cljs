@@ -1,7 +1,8 @@
 (ns muance.core
   (:refer-clojure :exclude [remove key get set])
   (:require [muance.diff]
-            [muance.vtree :as vtree]))
+            [muance.vtree :as vtree]
+            [goog.object :as o]))
 
 (defprotocol VTree
   (remove [this]
@@ -28,7 +29,7 @@
   []
   (assert (not (nil? muance.diff/*vnode*))
           (str "muance.core/key was called outside of render loop"))
-  (.-key muance.diff/*vnode*))
+  (o/get muance.diff/*vnode* "key"))
 
 ;; Useful to systematically execute an action on the DOM after it has been updated.
 (defn post-render
@@ -37,7 +38,7 @@
   (assert (not (nil? muance.diff/*vnode*))
           (str "muance.core/post-render was called outside of render loop"))
   (-> (muance.diff/get-render-queue muance.diff/*vnode*)
-      (.-postRenderHooks)
+      (o/get "postRenderHooks")
       (.add f)))
 
 (defmacro with-post-render
@@ -65,7 +66,7 @@
   []
   (assert (not (nil? muance.diff/*vnode*))
           (str "muance.core/parent-node was called outside of render loop"))
-  (when-let [p-vnode (.-parentVnode muance.diff/*vnode*)]
+  (when-let [p-vnode (o/get muance.diff/*vnode* "parentVnode")]
     (muance.diff/parent-node p-vnode)))
 
 (defn get
@@ -95,7 +96,7 @@
    (patch vtree component muance.diff/no-props-flag))
   ([vtree component props]
    (let [render-queue (vtree/render-queue vtree)
-         render-queue-fn (.-renderQueueFn render-queue)]
+         render-queue-fn (o/get render-queue "renderQueueFn")]
      (render-queue-fn #js {:renderQueue (vtree/render-queue vtree)
                            :props props
                            :compFn component

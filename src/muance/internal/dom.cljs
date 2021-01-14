@@ -12,18 +12,18 @@
        :text text})
 
 (defn text-node [t]
-  (let [vnode-index (or (.-childrenCount diff/*vnode*) 0)
-        parent-children (or (.-children diff/*vnode*) #js [])
+  (let [vnode-index (or (o/get diff/*vnode* "childrenCount") 0)
+        parent-children (or (o/get diff/*vnode* "children") #js [])
         prev (aget parent-children vnode-index)
-        prev-key (when prev (.-key prev))
-        prev-typeid (when prev (.-typeid prev))]
-    (set! (.-childrenCount diff/*vnode*) (inc vnode-index))
-    (when (nil? (.-children diff/*vnode*))
-      (set! (.-children diff/*vnode*) parent-children))
+        prev-key (when prev (o/get prev "key"))
+        prev-typeid (when prev (o/get prev "typeid"))]
+    (o/set diff/*vnode* "childrenCount" (inc vnode-index))
+    (when (nil? (o/get diff/*vnode* "children"))
+      (o/set diff/*vnode* "children" parent-children))
     (if (= 0 prev-typeid)
-      (when (not= (.-text prev) t)
-        (set! (.-text prev) t)
-        (o/set (.-nodeOrCompData prev) "nodeValue" t))
+      (when (not= (o/get prev "text") t)
+        (o/set prev "text" t)
+        (o/set (o/get prev "nodeOrCompData") "nodeValue" t))
       (let [vnode (new-text-vnode (.createTextNode js/document t) t)]
         (diff/insert-vnode-before
          diff/*vnode* vnode (aget parent-children vnode-index) vnode-index)
@@ -33,7 +33,7 @@
           (when prev (diff/remove-vnode prev)))))))
 
 (defn- handle-event-handler [key prev-handler handler]
-  (let [node (.-nodeOrCompData diff/*vnode*)]
+  (let [node (o/get diff/*vnode* "nodeOrCompData")]
     (when prev-handler
       (.removeEventListener node key prev-handler false))
     (when handler
@@ -41,7 +41,7 @@
   handler)
 
 (defn set-attribute [ns key val]
-  (let [node (.-nodeOrCompData diff/*vnode*)]
+  (let [node (o/get diff/*vnode* "nodeOrCompData")]
     (if (nil? val)
       (.removeAttribute node key)
       (if (nil? ns)
@@ -49,12 +49,12 @@
         (.setAttributeNS node ns key val)))))
 
 (defn set-property [key val]
-  (let [node (.-nodeOrCompData diff/*vnode*)]
+  (let [node (o/get diff/*vnode* "nodeOrCompData")]
     (o/set node key val)))
 
 (defn- set-style-custom [key val]
-  (let [node (.-nodeOrCompData diff/*vnode*)]
-    (.setProperty (.-style node) key val)))
+  (let [node (o/get diff/*vnode* "nodeOrCompData")]
+    (.setProperty (o/get node "style") key val)))
 
 (defn make-handler-0 [f]
   (when (fn? f)
@@ -148,7 +148,7 @@
       (set-property key val))))
 
 (defn- set-input-value [val]
-  (let [node (.-nodeOrCompData diff/*vnode*)]
+  (let [node (o/get diff/*vnode* "nodeOrCompData")]
     (when (not= (o/get node "value") val)
       (o/set node "value" val))))
 
@@ -160,8 +160,8 @@
     (diff/inc-attrs 1)))
 
 (defn- set-style [key val]
-  (let [node (.-nodeOrCompData diff/*vnode*)]
-    (o/set (.-style node) key val)))
+  (let [node (o/get diff/*vnode* "nodeOrCompData")]
+    (o/set (o/get node "style") key val)))
 
 (defn style [key val]
   (let [val (str val)]

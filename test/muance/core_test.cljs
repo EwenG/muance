@@ -253,3 +253,6 @@
 
 ;; Exceptions in tests are caught and *e is not set
 
+(comment
+  (run-tests 'muance.core-test)
+  )

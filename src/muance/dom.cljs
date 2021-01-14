@@ -22,9 +22,9 @@
   (core/remove [vtree]
     (let [vnode (vtree/vnode vtree)
           fragment (.createDocumentFragment js/document)]
-      (when-let [comp (aget (.-children vnode) 0)]
+      (when-let [comp (aget (o/get vnode "children") 0)]
         (diff/insert-vnode-before* fragment comp nil))
-      (set! (.-nodeOrCompData vnode) fragment)
+      (o/set vnode "nodeOrCompData" fragment)
       (o/remove diff/roots (vtree/id vtree))))
   (core/unmount [this]
     (core/patch this empty-comp))
@@ -33,11 +33,11 @@
             "Cannot call muance.core/refresh inside render loop")
     (let [vnode (vtree/vnode vtree)
           the-render-queue (vtree/render-queue vtree)
-          children (.-children vnode)]
+          children (o/get vnode "children")]
       (when-let [comp (aget children 0)]
         (diff/patch-impl the-render-queue vnode comp
                          (diff/get-comp-render-fn comp)
-                         (.-componentOrCompProps comp)
+                         (o/get comp "componentOrCompProps")
                          true)
         (diff/process-post-render-hooks the-render-queue)))))
 
@@ -56,28 +56,28 @@
       (.createElement js/document tag))))
 
 (defn remove-node [node]
-  (when-let [p (.-parentNode node)]
+  (when-let [p (o/get node "parentNode")]
     (.removeChild p node)))
 
 (extend-type js/Node
   context/Context
   (context/insert-before [parent-node vnode ref-node]
-    (.insertBefore parent-node (.-nodeOrCompData vnode) ref-node))
+    (.insertBefore parent-node (o/get vnode "nodeOrCompData") ref-node))
   (context/remove-node [parent-node node]
     (.removeChild parent-node node))
   core/VTreeInsert
   (core/insert-before [ref-node vtree]
-    (let [parent-node (.-parentNode ref-node)
+    (let [parent-node (o/get ref-node "parentNode")
           vnode (vtree/vnode vtree)]
-      (when-let [comp (aget (.-children vnode) 0)]
+      (when-let [comp (aget (o/get vnode "children") 0)]
         (diff/insert-vnode-before* parent-node comp ref-node))
-      (set! (.-nodeOrCompData vnode) parent-node)
+      (o/set vnode "nodeOrCompData" parent-node)
       (o/set diff/roots (vtree/id vtree) vtree)))
   (core/append-child [parent-node vtree]
     (let [vnode (vtree/vnode vtree)]
-      (when-let [comp (aget (.-children vnode) 0)]
+      (when-let [comp (aget (o/get vnode "children") 0)]
         (diff/insert-vnode-before* parent-node comp nil))
-      (set! (.-nodeOrCompData vnode) parent-node)
+      (o/set vnode "nodeOrCompData" parent-node)
       (o/set diff/roots (vtree/id vtree) vtree))))
 
 (defn- new-root-vnode []
@@ -112,70 +112,70 @@
        :keymapInvalid nil})
 
 (defn- handle-component-update [in]
-  (let [render-queue (.-renderQueue in)
+  (let [render-queue (o/get in "renderQueue")
         _ (assert (not (identical? render-queue diff/*render-queue*)))
-        props (.-props in)
-        comp-fn (.-compFn in)
-        vnode (.-vnode in)
+        props (o/get in "props")
+        comp-fn (o/get in "compFn")
+        vnode (o/get in "vnode")
         ;; depth == -1 means this was a call to muance.core/patch. In this case, the vnode is
         ;; the vtree vnode. We don't directly pass the vnode of the component at depth 0 because
         ;; it is nil before the firs rendering and this would cause potential concurrency
         ;; (multiple threads) problems
-        depth (.-depth in)
-        post-render-fn (.-postRenderFn in)
-        synchronous? (.-synchronous render-queue)
-        processing-flag (.-processingFlag render-queue)
-        dirty-flag (.-dirtyFlag render-queue)
-        first-render-promise (.-firstRenderPromise render-queue)]
+        depth (o/get in "depth")
+        post-render-fn (o/get in "postRenderFn")
+        synchronous? (o/get render-queue "synchronous")
+        processing-flag (o/get render-queue "processingFlag")
+        dirty-flag (o/get render-queue "dirtyFlag")
+        first-render-promise (o/get render-queue "firstRenderPromise")]
     ;; if this is the first render
     (if (not first-render-promise)
       ;; first render is synchronous
       (do
         (diff/patch-impl render-queue vnode nil comp-fn props false)
         (diff/process-post-render-hooks render-queue)
-        (set! (.-firstRenderPromise render-queue) true))
+        (o/set render-queue "firstRenderPromise" true))
       ;; if the patch data is coming from a call to the patch fn
       (do
         (if (= depth -1)
-          (if-let [dirty-comps (aget (.-dirtyComps render-queue) 0)]
+          (if-let [dirty-comps (aget (o/get render-queue "dirtyComps") 0)]
             (do
-              (set! (.-postRenderFn dirty-comps) post-render-fn)
-              (set! (.-props dirty-comps) props)
-              (set! (.-compFn dirty-comps) comp-fn)
-              (set! (.-vnode dirty-comps) vnode))
+              (o/set dirty-comps "postRenderFn" post-render-fn)
+              (o/set dirty-comps "props" props)
+              (o/set dirty-comps "compFn" comp-fn)
+              (o/set dirty-comps "vnode" vnode))
             (do
-              (set! (.-dirtyComps render-queue) #js [#js {:postRenderFn post-render-fn
-                                                          :props props
-                                                          :compFn comp-fn
-                                                          :vnode vnode}])))
-          (let [comp-data (.-nodeOrCompData vnode)]
-            (when-not (identical? dirty-flag (.-compDataDirtyFlag comp-data))
-              (if-let [dirty-comps (aget (.-dirtyComps render-queue) (inc depth))]
+              (o/set render-queue "dirtyComps" #js [#js {:postRenderFn post-render-fn
+                                                         :props props
+                                                         :compFn comp-fn
+                                                         :vnode vnode}])))
+          (let [comp-data (o/get vnode "nodeOrCompData")]
+            (when-not (identical? dirty-flag (o/get comp-data "compDataDirtyFlag"))
+              (if-let [dirty-comps (aget (o/get render-queue "dirtyComps") (inc depth))]
                 (do (.push dirty-comps #js {:postRenderFn post-render-fn
                                             :props props
                                             :compFn comp-fn
                                             :vnode vnode}))
-                (aset (.-dirtyComps render-queue) (inc depth)
+                (aset (o/get render-queue "dirtyComps") (inc depth)
                       #js [#js {:postRenderFn post-render-fn
                                 :props props
                                 :compFn comp-fn
                                 :vnode vnode}]))
-              (set! (.-compDataDirtyFlag comp-data) dirty-flag))))
-        (set! (.-pendingFlag render-queue) true)
+              (o/set comp-data "compDataDirtyFlag" dirty-flag))))
+        (o/set render-queue "pendingFlag" true)
         (if synchronous?
           (binding [diff/*rendered-flag* (js/Object.)]
             (diff/process-render-queue render-queue render-queue)
             (diff/process-post-render-hooks render-queue)
-            (set! (.-processingFlag render-queue) false)
-            (set! (.-dirtyFlag render-queue) (js/Object.)))
-          (when-not (.-processingFlag render-queue)
-            (set! (.-processingFlag render-queue) true)
+            (o/set render-queue "processingFlag" false)
+            (o/set render-queue "dirtyFlag" (js/Object.)))
+          (when-not (o/get render-queue "processingFlag")
+            (o/set render-queue "processingFlag" true)
             (.requestAnimationFrame
              js/window 
              (fn []
                (binding [diff/*rendered-flag* (js/Object.)]
-                 (set! (.-processingFlag render-queue) false)
-                 (set! (.-dirtyFlag render-queue) (js/Object.))
+                 (o/set render-queue "processingFlag" false)
+                 (o/set render-queue "dirtyFlag" (js/Object.))
                  (diff/process-render-queue render-queue render-queue)
                  (diff/process-post-render-hooks render-queue))))))))))
 
@@ -211,7 +211,7 @@
                              :dirtyComps #js []})]
      (when post-render-hook
        (-> (vtree/render-queue vt)
-           (.-postRenderHooks)
+           (o/get "postRenderHooks")
            (aset 0 (partial post-render-hook vt))))
      vt)))
 
@@ -222,8 +222,8 @@
           (str "muance.dom/set-timeout was called outside of render loop"))
   (let [component (if (diff/component? diff/*vnode*)
                     diff/*vnode*
-                    (.-componentOrCompProps diff/*vnode*))
-        state-ref (.-compDataStateRef (.-nodeOrCompData component))]
+                    (o/get diff/*vnode* "componentOrCompProps"))
+        state-ref (o/get (o/get component "nodeOrCompData") "compDataStateRef")]
     (.setTimeout js/window (fn [] (f state-ref)) millis)))
 
 (defn set-interval
@@ -233,7 +233,7 @@
           (str "muance.dom/set-interval was called outside of render loop"))
   (let [component (if (diff/component? diff/*vnode*)
                     diff/*vnode*
-                    (.-componentOrCompProps diff/*vnode*))
-        state-ref (.-compDataStateRef (.-nodeOrCompData component))]
+                    (o/get diff/*vnode* "componentOrCompProps"))
+        state-ref (o/get (o/get component "nodeOrCompData") "compDataStateRef")]
     (.setInterval js/window (fn [] (f state-ref)) millis)))
 

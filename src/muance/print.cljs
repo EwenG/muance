@@ -10,81 +10,81 @@
   Parent
   (-pr-writer [p writer opts]
     (-write writer "#Parent[")
-    (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
+    (-write writer (if (o/get p "typeid") (str (o/get p "typeid")) "nil"))
     (-write writer "]"))
   Component
   (-pr-writer [p writer opts]
     (-write writer "#Component[")
-    (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
+    (-write writer (if (o/get p "typeid") (str (o/get p "typeid")) "nil"))
     (-write writer "]"))
   KeyedNextVnode
   (-pr-writer [p writer opts]
     (-write writer "#KeyedNextVnode[")
-    (-write writer (if (.-typeid p) (str (.-typeid p)) "nil"))
+    (-write writer (if (o/get p "typeid") (str (o/get p "typeid")) "nil"))
     (-write writer "]")))
 
 (defn with-namespace [vnode-map vnode]
   (if (diff/component? vnode)
     vnode-map
-    (let [node (.-nodeOrCompData vnode)]
-      (assoc vnode-map :namespaceURI (.-namespaceURI node)))))
+    (let [node (o/get vnode "nodeOrCompData")]
+      (assoc vnode-map :namespaceURI (o/get node "namespaceURI")))))
 
 (defn format-comp-data [comp-data]
-  {:compDataName (.-compDataName comp-data)
-   :compDataStateRef (.-compDataStateRef comp-data)
-   :compDataSvgNamespace (.-compDataSvgNamespace comp-data)
-   :compDataIndexInParent (.-compDataIndexInParent comp-data)
-   :compDataDepth (.-compDataDepth comp-data)
-   :compDataDirtyFlag (.-compDataDirtyFlag comp-data)
-   :compDataRenderedFlag (.-compDataRenderedFlag comp-data)})
+  {:compDataName (o/get comp-data "compDataName")
+   :compDataStateRef (o/get comp-data "compDataStateRef")
+   :compDataSvgNamespace (o/get comp-data "compDataSvgNamespace")
+   :compDataIndexInParent (o/get comp-data "compDataIndexInParent")
+   :compDataDepth (o/get comp-data "compDataDepth")
+   :compDataDirtyFlag (o/get comp-data "compDataDirtyFlag")
+   :compDataRenderedFlag (o/get comp-data "compDataRenderedFlag")})
 
 (defn format-vnode [vnode]
   (when vnode
-    (cond (= 0 (.-typeid vnode))
-          {:typeid (.-typeid vnode)
-           :parentVnode (when-let [p (.-parentVnode vnode)]
-                          (->Parent (.-typeid p)))
-           :nodeOrCompData (.-nodeOrCompData vnode)
-           :text (.-text vnode)}
+    (cond (= 0 (o/get vnode "typeid"))
+          {:typeid (o/get vnode "typeid")
+           :parentVnode (when-let [p (o/get vnode "parentVnode")]
+                          (->Parent (o/get p "typeid")))
+           :nodeOrCompData (o/get vnode "nodeOrCompData")
+           :text (o/get vnode "text")}
           (diff/component? vnode)
-          {:typeid (.-typeid vnode)
-           :parentVnode (when-let [p (.-parentVnode vnode)]
-                          (->Parent (.-typeid p)))
-           :nodeOrCompData (format-comp-data (.-nodeOrCompData vnode))
-           :componentOrCompProps (.-componentOrCompProps vnode)
-           :childrenCount (.-childrenCount vnode)
-           :children (.-children vnode)
-           :attrsOrCompState (.-attrsOrCompState vnode)
-           :userData (.-userData vnode)
-           :unmount (.-unmount vnode)
-           :removeHook (.-removeHook vnode)
-           :key (.-key vnode)
-           :keyMoved (.-keyMoved vnode)
-           :keyNextVnode (when-let [node (.-keyNextVnode vnode)]
-                           (->KeyedNextVnode (.-typeid node)))
-           :keymap (when-let [keymap (.-keymap vnode)]
+          {:typeid (o/get vnode "typeid")
+           :parentVnode (when-let [p (o/get vnode "parentVnode")]
+                          (->Parent (o/get p "typeid")))
+           :nodeOrCompData (format-comp-data (o/get vnode "nodeOrCompData"))
+           :componentOrCompProps (o/get vnode "componentOrCompProps")
+           :childrenCount (o/get vnode "childrenCount")
+           :children (o/get vnode "children")
+           :attrsOrCompState (o/get vnode "attrsOrCompState")
+           :userData (o/get vnode "userData")
+           :unmount (o/get vnode "unmount")
+           :removeHook (o/get vnode "removeHook")
+           :key (o/get vnode "key")
+           :keyMoved (o/get vnode "keyMoved")
+           :keyNextVnode (when-let [node (o/get vnode "keyNextVnode")]
+                           (->KeyedNextVnode (o/get node "typeid")))
+           :keymap (when-let [keymap (o/get vnode "keymap")]
                      (into #{} (o/getKeys keymap)))
-           :keymapInvalid (.-keymapInvalid vnode)}
+           :keymapInvalid (o/get vnode "keymapInvalid")}
           :else
-          {:typeid (.-typeid vnode)
-           :parentVnode (when-let [p (.-parentVnode vnode)]
-                          (->Parent (.-typeid p)))
-           :nodeOrCompData (.-nodeOrCompData vnode)
-           :componentOrCompProps (when-let [c (.-componentOrCompProps vnode)]
-                                   (->Component (.-typeid c)))
-           :childrenCount (.-childrenCount vnode)
-           :children (.-children vnode)
-           :attrsOrCompState (.-attrsOrCompState vnode)
-           :userData (.-userData vnode)
-           :unmount (.-unmount vnode)
-           :removeHook (.-removeHook vnode)
-           :key (.-key vnode)
-           :keyMoved (.-keyMoved vnode)
-           :keyNextVnode (when-let [node (.-keyNextVnode vnode)]
-                           (->KeyedNextVnode (.-typeid node)))
-           :keymap (when-let [keymap (.-keymap vnode)]
+          {:typeid (o/get vnode "typeid")
+           :parentVnode (when-let [p (o/get vnode "parentVnode")]
+                          (->Parent (o/get p "typeid")))
+           :nodeOrCompData (o/get vnode "nodeOrCompData")
+           :componentOrCompProps (when-let [c (o/get vnode "componentOrCompProps")]
+                                   (->Component (o/get c "typeid")))
+           :childrenCount (o/get vnode "childrenCount")
+           :children (o/get vnode "children")
+           :attrsOrCompState (o/get vnode "attrsOrCompState")
+           :userData (o/get vnode "userData")
+           :unmount (o/get vnode "unmount")
+           :removeHook (o/get vnode "removeHook")
+           :key (o/get vnode "key")
+           :keyMoved (o/get vnode "keyMoved")
+           :keyNextVnode (when-let [node (o/get vnode "keyNextVnode")]
+                           (->KeyedNextVnode (o/get node "typeid")))
+           :keymap (when-let [keymap (o/get vnode "keymap")]
                      (into #{} (o/getKeys keymap)))
-           :keymapInvalid (.-keymapInvalid vnode)})))
+           :keymapInvalid (o/get vnode "keymapInvalid")})))
 
 (declare format-vnodes)
 
@@ -101,7 +101,7 @@
 (defn format-vnodes [vnode]
   (let [vnode-map (format-vnode vnode)
         vnode-map (with-namespace vnode-map vnode)]
-    (if (= 0 (.-typeid vnode-map))
+    (if (= 0 (o/get vnode-map "typeid"))
       vnode-map
       (if (contains? vnode-map :children)
         (update-in vnode-map [:children] format-children)
@@ -109,14 +109,14 @@
 
 (defn format-vtree [vtree]
   (when vtree
-    (format-vnodes (.-vnode vtree))))
+    (format-vnodes (o/get vtree "vnode"))))
 
 (defn format-dirty-comp [dirty-comp]
   (when dirty-comp
-    {:postRenderFn (.-postRenderFn dirty-comp)
-     :props (.-props dirty-comp)
-     :compFn (.-compFn dirty-comp)
-     :vnode (.-vnode dirty-comp)}))
+    {:postRenderFn (o/get dirty-comp "postRenderFn")
+     :props (o/get dirty-comp "props")
+     :compFn (o/get dirty-comp "compFn")
+     :vnode (o/get dirty-comp "vnode")}))
 
 (defn format-dirty-comps-at-depth [dirty-comps]
   (when dirty-comps
@@ -146,12 +146,12 @@
           (persistent! arr))))))
 
 (defn format-render-queue [vtree]
-  (when-let [render-queue (.-render-queue vtree)]
-    {:renderQueueFn (.-renderQueueFn render-queue)
-     :synchronous (.-synchronous render-queue)
-     :processingFlag (.-processingFlag render-queue)
-     :pendingFlag (.-pendingFlag render-queue)
-     :dirtyFlag (.-dirtyFlag render-queue)
-     :firstRenderPromise (.-firstRenderPromise render-queue)
-     :postRenderHooks (.-postRenderHooks render-queue)
-     :dirtyComps (format-dirty-comps (.-dirtyComps render-queue))}))
+  (when-let [render-queue (o/get vtree "render-queue")]
+    {:renderQueueFn (o/get render-queue "renderQueueFn")
+     :synchronous (o/get render-queue "synchronous")
+     :processingFlag (o/get render-queue "processingFlag")
+     :pendingFlag (o/get render-queue "pendingFlag")
+     :dirtyFlag (o/get render-queue "dirtyFlag")
+     :firstRenderPromise (o/get render-queue "firstRenderPromise")
+     :postRenderHooks (o/get render-queue "postRenderHooks")
+     :dirtyComps (format-dirty-comps (o/get render-queue "dirtyComps"))}))
