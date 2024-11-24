@@ -119,7 +119,7 @@
         vnode (o/get in "vnode")
         ;; depth == -1 means this was a call to muance.core/patch. In this case, the vnode is
         ;; the vtree vnode. We don't directly pass the vnode of the component at depth 0 because
-        ;; it is nil before the firs rendering and this would cause potential concurrency
+        ;; it is nil before the first rendering and this would cause potential concurrency
         ;; (multiple threads) problems
         depth (o/get in "depth")
         post-render-fn (o/get in "postRenderFn")
@@ -200,10 +200,10 @@
                              ;; the component data under the compDataDirtyFlag key
                              :dirtyFlag #js {}
                              :firstRenderPromise false
-                             ;; The prost render hooks. Must only be modified by the rendering thread.
+                             ;; The post render hooks. Must only be modified by the rendering thread.
                              :postRenderHooks #js []
                              ;; A component is enqueued by the batching thread in this array when it
-                             ;; becomes dirty. Dirty components are reset to nil before beeing passed
+                             ;; becomes dirty. Dirty components are reset to nil before being passed
                              ;; to the rendering thread. The dirty comps used by the rendering thread
                              ;; are a flat copy (not deep copy !) of the dirty comps. Thus the
                              ;; batching thread and the rendering thread do not share the same array.
